@@ -16,6 +16,7 @@ class AnalysisRequest(BaseModel):
     api_key: str | None = None
     model: str | None = None
     base_url: str | None = None
+    user_prompt: str | None = None
 
 
 class Finding(BaseModel):

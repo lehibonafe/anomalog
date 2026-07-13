@@ -379,6 +379,12 @@
   margin-top: 0.6rem;
 }
 
+.analysis-prompt {
+  resize: vertical;
+  min-height: 3.2rem;
+  margin-bottom: 0.6rem;
+}
+
 .stats-row {
   display: flex;
   flex-wrap: wrap;

@@ -96,6 +96,7 @@ export interface AnalysisRequest {
   api_key?: string | null;
   model?: string | null;
   base_url?: string | null;
+  user_prompt?: string | null;
 }
 
 export interface AnalysisResponse {

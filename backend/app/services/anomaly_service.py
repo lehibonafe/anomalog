@@ -31,6 +31,7 @@ class AnomalyService:
         api_key: str | None = None,
         model: str | None = None,
         base_url: str | None = None,
+        user_prompt: str | None = None,
     ) -> AnalysisResponse:
         provider_cls = get_provider_class(provider)
         defaults = self._defaults[provider]
@@ -44,7 +45,12 @@ class AnomalyService:
         )
         limiter = self._limiters[provider]
 
-        relevant, skipped = log_filter.select_relevant(events, self.settings)
+        if user_prompt:
+            # the regex prefilter is tuned to the default anomaly scan and
+            # could drop the very lines a custom request asks about
+            relevant, skipped = events, 0
+        else:
+            relevant, skipped = log_filter.select_relevant(events, self.settings)
         relevant = log_filter.truncate_and_cap(relevant, self.settings)
         chunks = log_filter.chunk(relevant, self.settings)
 
@@ -54,7 +60,9 @@ class AnomalyService:
         for i, chunk_events in enumerate(chunks):
             await limiter.wait()
             try:
-                result = await self._call_chunk(chunk_events, context, instance, defaults.max_retries)
+                result = await self._call_chunk(
+                    chunk_events, context, instance, defaults.max_retries, user_prompt
+                )
                 findings.extend(result.findings)
                 analyzed += 1
             except LLMQuotaExceededError as e:
@@ -87,8 +95,9 @@ class AnomalyService:
         context: AnalysisContext,
         provider: LLMProvider,
         max_retries: int,
+        user_prompt: str | None = None,
     ) -> ChunkResult:
-        prompt = build_prompt(chunk_events, context)
+        prompt = build_prompt(chunk_events, context, user_prompt)
         for attempt in range(max_retries + 1):
             try:
                 return await provider.call_chunk(prompt)

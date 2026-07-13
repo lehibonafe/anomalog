@@ -12,8 +12,8 @@ export function useAnomalyAnalysis() {
   const llmModel = useSelectionStore((s) => s.llmModel);
   const llmBaseUrl = useSelectionStore((s) => s.llmBaseUrl);
 
-  return useMutation<AnalysisResponse>({
-    mutationFn: () =>
+  return useMutation<AnalysisResponse, Error, string>({
+    mutationFn: (userPrompt) =>
       runAnomalyAnalysis({
         events,
         context: { source_description: sourceDescription || "Selected log slice" },
@@ -21,6 +21,7 @@ export function useAnomalyAnalysis() {
         api_key: llmApiKey.trim() || null,
         model: llmModel.trim() || null,
         base_url: llmBaseUrl.trim() || null,
+        user_prompt: userPrompt.trim() || null,
       }),
   });
 }

@@ -18,4 +18,5 @@ async def analyze_anomalies(
         api_key=request.api_key or None,
         model=request.model or None,
         base_url=request.base_url or None,
+        user_prompt=request.user_prompt or None,
     )

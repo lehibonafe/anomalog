@@ -1,4 +1,5 @@
 import { isAxiosError } from "axios";
+import { useState } from "react";
 
 import { useAnomalyAnalysis } from "../../hooks/useAnomalyAnalysis";
 import type { LlmProvider } from "../../state/selectionStore";
@@ -22,6 +23,7 @@ export function AnomalyPanel() {
   const setLlmModel = useSelectionStore((s) => s.setLlmModel);
   const llmBaseUrl = useSelectionStore((s) => s.llmBaseUrl);
   const setLlmBaseUrl = useSelectionStore((s) => s.setLlmBaseUrl);
+  const [userPrompt, setUserPrompt] = useState("");
   const analysis = useAnomalyAnalysis();
 
   const quotaExceeded =
@@ -85,14 +87,29 @@ export function AnomalyPanel() {
         )}
       </details>
 
+      <label className="model-settings-field">
+        Prompt (optional)
+        <textarea
+          className="analysis-prompt"
+          placeholder="What should the LLM look for? Blank = scan for errors and anomalies"
+          value={userPrompt}
+          onChange={(e) => setUserPrompt(e.target.value)}
+          rows={3}
+        />
+      </label>
+
       <button
         type="button"
         className="btn-primary btn-block"
         disabled={events.length === 0 || analysis.isPending}
-        onClick={() => analysis.mutate()}
+        onClick={() => analysis.mutate(userPrompt)}
       >
         {analysis.isPending && <span className="spinner" />}
-        {analysis.isPending ? "Analyzing..." : "Analyze for anomalies"}
+        {analysis.isPending
+          ? "Analyzing..."
+          : userPrompt.trim()
+            ? "Analyze with prompt"
+            : "Analyze logs"}
       </button>
 
       {quotaExceeded && (
@@ -125,7 +142,7 @@ export function AnomalyPanel() {
             </p>
           ))}
           {analysis.data.findings.length === 0 && (
-            <p className="hint">No anomalies found in this slice.</p>
+            <p className="hint">No findings for this slice.</p>
           )}
           <div className="finding-list">
             {analysis.data.findings.map((f) => (

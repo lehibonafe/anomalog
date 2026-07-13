@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 
 import boto3
@@ -11,6 +12,12 @@ def get_boto3_session() -> boto3.Session:
     kwargs: dict = {}
     if settings.aws_profile:
         kwargs["profile_name"] = settings.aws_profile
+    elif os.environ.get("AWS_PROFILE") == "":
+        # docker compose's env_file exports the blank `AWS_PROFILE=` line as an
+        # empty-string env var, which botocore reads as a profile named "" and
+        # raises ProfileNotFound; treat empty as unset so the credential chain
+        # can fall through to env keys / instance role
+        del os.environ["AWS_PROFILE"]
     if settings.aws_region:
         kwargs["region_name"] = settings.aws_region
     return boto3.Session(**kwargs)

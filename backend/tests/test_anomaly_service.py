@@ -86,6 +86,31 @@ async def test_analyze_unknown_provider_raises_bad_request():
         )
 
 
+async def test_analyze_with_user_prompt_reaches_llm_and_skips_prefilter(monkeypatch):
+    settings = make_settings(chunk_size_lines=10, gemini_max_chunks_per_analysis=5)
+    service = AnomalyService(settings)
+
+    seen_prompts: list[str] = []
+
+    async def fake_call_chunk(self, prompt):
+        seen_prompts.append(prompt)
+        return ChunkResult(findings=[])
+
+    monkeypatch.setattr(GeminiProvider, "call_chunk", fake_call_chunk)
+
+    # plain lines the anomaly-scan regex prefilter would not select
+    events = [make_event(i, f"user login ok id={i}") for i in range(3)]
+    result = await service.analyze(
+        events,
+        AnalysisContext(source_description="test"),
+        user_prompt="count successful logins",
+    )
+
+    assert "count successful logins" in seen_prompts[0]
+    assert result.lines_considered == 3
+    assert result.lines_skipped_by_prefilter == 0
+
+
 async def test_analyze_raises_quota_error_when_first_chunk_exhausted(monkeypatch):
     settings = make_settings(chunk_size_lines=10, gemini_max_chunks_per_analysis=5)
     service = AnomalyService(settings)
@@ -107,7 +132,7 @@ async def test_analyze_returns_partial_findings_when_quota_hits_mid_run(monkeypa
 
     call_count = {"n": 0}
 
-    async def flaky_call(chunk_events, context, provider, max_retries):
+    async def flaky_call(chunk_events, context, provider, max_retries, user_prompt=None):
         call_count["n"] += 1
         if call_count["n"] == 1:
             return ChunkResult(
