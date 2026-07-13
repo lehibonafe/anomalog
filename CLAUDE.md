@@ -4,10 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A local web app for investigating AWS CloudWatch Logs and S3-stored logs: pick a
-source (log group(s), or bucket+prefix) and time range, view matching log lines,
-and run a Google Gemini (free tier) analysis over the filtered slice that flags
-errors/exceptions/stack traces/anomalies. Two services: `backend/` (FastAPI) and
+**Anomalog** — a local web app for investigating AWS CloudWatch Logs and
+S3-stored logs: pick a source (log group(s), or bucket+prefix) and time range,
+view matching log lines, and run an LLM analysis over the filtered slice —
+by default flagging errors/exceptions/stack traces/anomalies, or steered by an
+optional user-supplied prompt (Gemini free tier by default; OpenAI/Anthropic/
+Ollama opt-in per request). Two services: `backend/` (FastAPI) and
 `frontend/` (React + TypeScript + Vite), run independently, no shared build step.
 
 ## Commands
@@ -73,7 +75,8 @@ host's `~/.aws` read-only to `/root/.aws` (container runs as root), and
 ```
 Browser (React/Vite, :5173) → axios (JSON) → FastAPI backend (:8000)
                                                  ├── boto3 → CloudWatch Logs / S3
-                                                 └── google-genai → Gemini API (free tier)
+                                                 └── provider SDKs → Gemini (default) /
+                                                     OpenAI / Anthropic / Ollama
 ```
 
 No database. No app-level auth — this is local-only, single-user; AWS
@@ -93,6 +96,15 @@ blank; a named `~/.aws/credentials` profile → set `AWS_PROFILE` to it. When
 this backend later runs on AWS compute, `AWS_PROFILE` stays unset and boto3
 falls through further to the instance/task IAM role — no code path changes
 between local dev and deployment.
+
+One Docker-specific trap, now handled in code: docker compose's `env_file:`
+exports the blank `AWS_PROFILE=` line as an *empty-string* env var, which
+botocore reads directly (bypassing `Settings`) as a profile named `""` and
+raises `ProfileNotFound: The config profile () could not be found`. This never
+happens locally because pydantic reads `.env` without touching the process
+environment. `get_boto3_session` therefore deletes an empty `AWS_PROFILE` from
+`os.environ` before building the session — keep that behavior if you touch
+`aws_session.py`.
 
 ### The line-index contract (ties LLM findings back to on-screen log lines)
 
@@ -130,9 +142,15 @@ be scoped with a tighter key prefix.
 
 ### Multi-provider LLM abstraction (`services/llm/` + `anomaly_service.py`)
 
-Anomaly analysis supports four providers — Gemini, OpenAI, Anthropic, and
+Analysis supports four providers — Gemini, OpenAI, Anthropic, and
 Ollama (local) — selected per-request via `AnalysisRequest.provider`
-(defaults to `"gemini"`, matching pre-multi-provider behavior). Only Gemini
+(defaults to `"gemini"`, matching pre-multi-provider behavior).
+`AnalysisRequest.user_prompt` (optional) swaps only the instruction block
+inside the shared `build_prompt`: blank → the default anomaly/error scan;
+set → the LLM answers the user's request instead. Both modes return the same
+structured `Finding`s citing `line_index` values, so the line-index contract
+and click-to-highlight work identically — don't fork the output schema per
+mode. Only Gemini
 has a server-configured default key (`Settings.gemini_api_key`, required at
 boot); the other three are purely opt-in via the frontend's "Model settings"
 override fields (`AnomalyPanel.tsx`) — there are no required `Settings`
@@ -178,7 +196,10 @@ Orchestration (provider-agnostic, must not change per-provider) lives in
 1. `log_filter.select_relevant` — regex-prefilters for
    `ERROR|WARN|FATAL|EXCEPTION|TRACEBACK|5xx|timeout|refused|denied` plus
    stack-frame patterns, keeping ±2 lines of context; falls back to even
-   sampling if nothing matches (so quiet logs still get scanned).
+   sampling if nothing matches (so quiet logs still get scanned). **Skipped
+   entirely when the request carries a `user_prompt`** — the regex is tuned to
+   the anomaly scan and could drop the very lines a custom request asks about;
+   volume is still bounded by steps 2–3.
 2. `log_filter.truncate_and_cap` — per-line middle-truncation, then caps total
    lines/chars, preferring the most recent lines when over budget.
 3. `log_filter.chunk` — splits into at most `gemini_max_chunks_per_analysis`
