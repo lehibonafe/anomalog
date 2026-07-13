@@ -1,4 +1,4 @@
-# Anomalog
+# TraceMind
 
 Local web app for investigating AWS CloudWatch Logs and S3-stored logs: pick a
 source (log groups, or bucket + prefix) and a time range, browse the matching

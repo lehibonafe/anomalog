@@ -7,7 +7,7 @@ from app.core.errors import register_exception_handlers
 
 settings = get_settings()
 
-app = FastAPI(title="Anomalog")
+app = FastAPI(title="TraceMind")
 
 app.add_middleware(
     CORSMiddleware,

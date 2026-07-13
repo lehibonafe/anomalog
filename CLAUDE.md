@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**Anomalog** — a local web app for investigating AWS CloudWatch Logs and
+**TraceMind** — a local web app for investigating AWS CloudWatch Logs and
 S3-stored logs: pick a source (log group(s), or bucket+prefix) and time range,
 view matching log lines, and run an LLM analysis over the filtered slice —
 by default flagging errors/exceptions/stack traces/anomalies, or steered by an
