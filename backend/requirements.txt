@@ -1,0 +1,11 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+boto3>=1.34
+pydantic>=2.7
+pydantic-settings>=2.3
+google-genai>=1.0
+openai>=2.0,<3.0
+anthropic>=0.110,<1.0
+pytest
+pytest-asyncio
+httpx
