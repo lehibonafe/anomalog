@@ -171,6 +171,29 @@
   margin-bottom: 0.6rem;
 }
 
+.title-with-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--accent);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.link-button:hover:not(:disabled) {
+  background: none;
+  border: none;
+  text-decoration: underline;
+}
+
 .preset-row {
   display: flex;
   flex-wrap: wrap;
@@ -242,6 +265,7 @@
   padding: 0;
   max-height: 220px;
   overflow-y: auto;
+  overflow-x: auto;
   font-size: 0.78rem;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
@@ -250,6 +274,10 @@
 
 .checkbox-list li {
   padding: 0;
+  /* let long keys extend past the panel width (horizontal scroll) while
+     borders/hover still span the full row on short keys */
+  width: max-content;
+  min-width: 100%;
 }
 
 .checkbox-list li:not(:last-child) {
@@ -262,8 +290,6 @@
   gap: 0.5rem;
   padding: 0.4rem 0.6rem;
   cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   font-family: ui-monospace, monospace;
 }

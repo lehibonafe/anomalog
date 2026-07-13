@@ -15,9 +15,21 @@ export function TimeRangePicker() {
     setActivePreset(preset);
   };
 
+  const clearRange = () => {
+    setTimeRange("", "");
+    setActivePreset(null);
+  };
+
   return (
     <div className="panel-section">
-      <div className="panel-section-title">Time range</div>
+      <div className="panel-section-title title-with-action">
+        Time range
+        {(startTime || endTime) && (
+          <button type="button" className="link-button" onClick={clearRange}>
+            Clear
+          </button>
+        )}
+      </div>
       <div className="preset-row">
         {TIME_PRESETS.map((p) => (
           <button
