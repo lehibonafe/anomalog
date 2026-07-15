@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 import type { LogEvent } from "../api/types";
 
-export type SourceMode = "cloudwatch" | "s3";
+export type SourceMode = "cloudwatch" | "s3" | "cloudtrail";
 export type LlmProvider = "gemini" | "openai" | "anthropic" | "ollama";
 
 export interface HighlightedRange {

@@ -29,3 +29,7 @@ def get_logs_client():
 
 def get_s3_client():
     return get_boto3_session().client("s3")
+
+
+def get_cloudtrail_client():
+    return get_boto3_session().client("cloudtrail")

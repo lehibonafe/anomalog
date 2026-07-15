@@ -1,4 +1,4 @@
-export type LogSource = "cloudwatch" | "s3";
+export type LogSource = "cloudwatch" | "s3" | "cloudtrail";
 
 export interface LogEvent {
   source: LogSource;
@@ -30,6 +30,32 @@ export interface CloudWatchSearchRequest {
 }
 
 export interface CloudWatchSearchResponse {
+  events: LogEvent[];
+  cursor: string | null;
+  truncated: boolean;
+  total_returned: number;
+}
+
+export type CloudTrailLookupAttributeKey =
+  | "EventId"
+  | "EventName"
+  | "ReadOnly"
+  | "Username"
+  | "ResourceType"
+  | "ResourceName"
+  | "EventSource"
+  | "AccessKeyId";
+
+export interface CloudTrailSearchRequest {
+  start_time: string;
+  end_time: string;
+  lookup_attribute_key?: CloudTrailLookupAttributeKey | null;
+  lookup_attribute_value?: string | null;
+  limit?: number;
+  cursor?: string | null;
+}
+
+export interface CloudTrailSearchResponse {
   events: LogEvent[];
   cursor: string | null;
   truncated: boolean;
