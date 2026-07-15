@@ -10,6 +10,7 @@ from app.schemas.cloudwatch import (
     LogGroupsResponse,
 )
 from app.schemas.common import LogEvent
+from app.services.masking import mask_message
 
 
 def _ms_to_dt(ms: int | None) -> datetime | None:
@@ -96,7 +97,7 @@ def search_log_events(
                     origin=name,
                     stream_or_key=e.get("logStreamName", ""),
                     timestamp=_ms_to_dt(e.get("timestamp")),
-                    message=e.get("message", ""),
+                    message=mask_message(e.get("message", "")),
                     line_index=0,
                 )
             )

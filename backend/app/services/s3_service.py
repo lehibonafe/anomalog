@@ -12,6 +12,7 @@ from app.schemas.s3 import (
     S3ObjectContentInfo,
     S3ObjectsResponse,
 )
+from app.services.masking import mask_message
 
 
 def list_buckets() -> S3BucketsResponse:
@@ -92,7 +93,7 @@ def fetch_object_content(
                     origin=bucket,
                     stream_or_key=key,
                     timestamp=None,
-                    message=line,
+                    message=mask_message(line),
                     line_index=line_idx,
                 )
             )

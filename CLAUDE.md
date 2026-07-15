@@ -119,6 +119,20 @@ currently rendered in `LogViewer` — no server-side session or cache needed to
 keep them in sync. If you change how events are fetched/merged, preserve this:
 `line_index` must be assigned once, in final display order, per response.
 
+### Sensitive data masking
+
+`services/masking.py::mask_message` is applied unconditionally to every
+`LogEvent.message` at the source — inline in `cloudwatch_service.search_log_events`
+and `s3_service.fetch_object_content`, before `line_index` is assigned. It
+regex-redacts credentials/secrets (AWS access keys, JWTs, Bearer/Basic auth
+headers, `password=`/`api_key=`/etc. key-value pairs) and PII (emails, SSNs,
+phone numbers, credit card numbers validated via Luhn to avoid false-positiving
+on arbitrary digit sequences like ports or IDs) to `***MASKED***`. There is no
+config flag or per-request toggle to disable it — masking always runs before
+data reaches the frontend or any LLM provider. Because it runs before
+`line_index` assignment, the UI and the LLM always see the same (masked) text,
+preserving the line-index contract above.
+
 ### CloudWatch multi-group search pagination
 
 `cloudwatch_service.search_log_events` loops `filter_log_events` per log group
