@@ -1,12 +1,58 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.config import Settings
+from app.core.errors import BadRequestError
 from app.services import cloudwatch_service
 
 
 def make_settings(**overrides) -> Settings:
     return Settings(gemini_api_key="test-key", **overrides)
+
+
+@patch("app.services.cloudwatch_service.get_logs_client")
+def test_search_log_events_rejects_range_over_max_days(mock_get_client):
+    settings = make_settings(max_time_range_days=7)
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    end = start + timedelta(days=7, seconds=1)
+
+    with pytest.raises(BadRequestError):
+        cloudwatch_service.search_log_events(
+            log_group_names=["group-a"],
+            start_time=start,
+            end_time=end,
+            filter_pattern=None,
+            limit=100,
+            cursor=None,
+            settings=settings,
+        )
+
+    mock_get_client.assert_not_called()
+
+
+@patch("app.services.cloudwatch_service.get_logs_client")
+def test_search_log_events_allows_range_at_exactly_max_days(mock_get_client):
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.filter_log_events.return_value = {"events": []}
+
+    settings = make_settings(max_time_range_days=7)
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    end = start + timedelta(days=7)
+
+    result = cloudwatch_service.search_log_events(
+        log_group_names=["group-a"],
+        start_time=start,
+        end_time=end,
+        filter_pattern=None,
+        limit=100,
+        cursor=None,
+        settings=settings,
+    )
+
+    assert result.events == []
 
 
 @patch("app.services.cloudwatch_service.get_logs_client")

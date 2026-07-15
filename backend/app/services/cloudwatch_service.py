@@ -1,9 +1,10 @@
 import base64
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.config import Settings
 from app.core.aws_session import get_logs_client
+from app.core.errors import BadRequestError
 from app.schemas.cloudwatch import (
     CloudWatchSearchResponse,
     LogGroup,
@@ -63,6 +64,14 @@ def search_log_events(
     cursor: str | None,
     settings: Settings,
 ) -> CloudWatchSearchResponse:
+    max_range = timedelta(days=settings.max_time_range_days)
+    if end_time - start_time > max_range:
+        raise BadRequestError(
+            f"Time range too large: max {settings.max_time_range_days} days between "
+            "start and end (CloudWatch Logs scanning is billed by data scanned across "
+            "the range)."
+        )
+
     client = get_logs_client()
     start_ms = int(start_time.timestamp() * 1000)
     end_ms = int(end_time.timestamp() * 1000)

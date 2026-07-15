@@ -1,8 +1,10 @@
+import { isAxiosError } from "axios";
 import { useState } from "react";
 
 import { useCloudWatchSearch } from "../../hooks/useCloudWatchSearch";
 import { useLogGroups } from "../../hooks/useLogGroups";
 import { useSelectionStore } from "../../state/selectionStore";
+import { exceedsMaxTimeRange } from "../../utils/time";
 
 export function CloudWatchSourcePicker() {
   const [prefix, setPrefix] = useState("");
@@ -24,7 +26,8 @@ export function CloudWatchSourcePicker() {
     );
   };
 
-  const canSearch = logGroupNames.length > 0 && !!startTime && !!endTime;
+  const rangeTooLong = exceedsMaxTimeRange(startTime, endTime);
+  const canSearch = logGroupNames.length > 0 && !!startTime && !!endTime && !rangeTooLong;
 
   return (
     <div className="panel-section">
@@ -70,7 +73,13 @@ export function CloudWatchSourcePicker() {
         {search.isPending && <span className="spinner" />}
         {search.isPending ? "Searching..." : "Search logs"}
       </button>
-      {search.isError && <p className="error-text">Search failed. Check the backend logs.</p>}
+      {search.isError && (
+        <p className="error-text">
+          {isAxiosError(search.error) && search.error.response?.status === 400
+            ? search.error.response?.data?.detail
+            : "Search failed. Check the backend logs."}
+        </p>
+      )}
     </div>
   );
 }

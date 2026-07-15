@@ -22,6 +22,14 @@ export function S3SourcePicker() {
     );
   };
 
+  const visibleKeys = objects.data?.objects.map((o) => o.key) ?? [];
+  const allVisibleSelected =
+    visibleKeys.length > 0 && visibleKeys.every((k) => selectedKeys.includes(k));
+
+  const toggleSelectAll = () => {
+    setSelectedKeys(allVisibleSelected ? [] : visibleKeys);
+  };
+
   return (
     <div className="panel-section">
       <div className="panel-section-title">S3 bucket + prefix</div>
@@ -47,6 +55,16 @@ export function S3SourcePicker() {
       />
       {objects.isLoading && <p className="hint">Loading objects...</p>}
       {objects.error && <p className="error-text">Failed to list objects.</p>}
+      {visibleKeys.length > 0 && (
+        <div className="title-with-action">
+          <span className="hint">
+            {selectedKeys.length} of {visibleKeys.length} selected
+          </span>
+          <button type="button" className="link-button" onClick={toggleSelectAll}>
+            {allVisibleSelected ? "Deselect all" : "Select all"}
+          </button>
+        </div>
+      )}
       <ul className="checkbox-list">
         {objects.data?.objects.map((obj) => (
           <li key={obj.key}>

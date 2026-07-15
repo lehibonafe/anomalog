@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     gemini_max_retries: int = 2
 
     # Log volume caps
+    max_time_range_days: int = 7
     max_log_search_lines: int = 5000
     max_analysis_lines: int = 1500
     max_analysis_chars: int = 500_000

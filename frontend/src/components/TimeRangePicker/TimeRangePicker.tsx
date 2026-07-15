@@ -1,13 +1,20 @@
 import { useState } from "react";
 
 import { useSelectionStore } from "../../state/selectionStore";
-import { presetToRange, TIME_PRESETS, type TimePreset } from "../../utils/time";
+import {
+  exceedsMaxTimeRange,
+  MAX_TIME_RANGE_DAYS,
+  presetToRange,
+  TIME_PRESETS,
+  type TimePreset,
+} from "../../utils/time";
 
 export function TimeRangePicker() {
   const startTime = useSelectionStore((s) => s.startTime);
   const endTime = useSelectionStore((s) => s.endTime);
   const setTimeRange = useSelectionStore((s) => s.setTimeRange);
   const [activePreset, setActivePreset] = useState<TimePreset | null>(null);
+  const rangeTooLong = exceedsMaxTimeRange(startTime, endTime);
 
   const applyPreset = (preset: TimePreset) => {
     const { start, end } = presetToRange(preset, new Date());
@@ -66,6 +73,12 @@ export function TimeRangePicker() {
           />
         </label>
       </div>
+      {rangeTooLong && (
+        <p className="error-text">
+          Range exceeds {MAX_TIME_RANGE_DAYS} days — narrow it to avoid scanning large log
+          volumes and unexpected AWS charges.
+        </p>
+      )}
     </div>
   );
 }

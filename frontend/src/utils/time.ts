@@ -1,6 +1,14 @@
-import { subDays, subHours, subMinutes } from "date-fns";
+import { differenceInMilliseconds, subDays, subHours, subMinutes } from "date-fns";
 
 export type TimePreset = "15m" | "1h" | "24h" | "7d";
+
+export const MAX_TIME_RANGE_DAYS = 7;
+
+export function exceedsMaxTimeRange(start: string, end: string): boolean {
+  if (!start || !end) return false;
+  const ms = differenceInMilliseconds(new Date(end), new Date(start));
+  return ms > MAX_TIME_RANGE_DAYS * 24 * 60 * 60 * 1000;
+}
 
 export const TIME_PRESETS: { value: TimePreset; label: string }[] = [
   { value: "15m", label: "Last 15 minutes" },

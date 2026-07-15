@@ -133,6 +133,22 @@ data reaches the frontend or any LLM provider. Because it runs before
 `line_index` assignment, the UI and the LLM always see the same (masked) text,
 preserving the line-index contract above.
 
+### CloudWatch time-range cap
+
+`cloudwatch_service.search_log_events` rejects (`BadRequestError`, HTTP 400)
+any request where `end_time - start_time` exceeds `Settings.max_time_range_days`
+(default 7) — CloudWatch Logs `filter_log_events` is billed by data scanned
+across the queried range, so an unbounded range is an unbounded-cost query, not
+just a large response. The frontend mirrors this client-side
+(`utils/time.ts::exceedsMaxTimeRange`, used in `TimeRangePicker` and
+`CloudWatchSourcePicker`) to block the search button before the request fires;
+the backend check is the actual enforcement point since the frontend one is
+only a UX nicety. S3's `list_objects` start/end filtering is deliberately left
+uncapped — per the S3 section below, it already lists the whole prefix from
+AWS and filters by `LastModified` client-side, so a time cap there wouldn't
+reduce the underlying `ListObjectsV2` cost the way it does for CloudWatch;
+prefix-scoping is the actual cost lever for S3.
+
 ### CloudWatch multi-group search pagination
 
 `cloudwatch_service.search_log_events` loops `filter_log_events` per log group
