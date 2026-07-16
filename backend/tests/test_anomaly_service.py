@@ -3,11 +3,12 @@ from datetime import datetime, timezone
 import pytest
 
 from app.config import Settings
-from app.core.errors import BadRequestError, LLMQuotaExceededError
+from app.core.errors import BadRequestError, LLMQuotaExceededError, LLMRequestError
 from app.schemas.analysis import AnalysisContext, ChunkResult, Finding
 from app.schemas.common import LogEvent
 from app.services.anomaly_service import AnomalyService
 from app.services.llm.gemini_provider import GeminiProvider
+from app.services.llm.openai_provider import OpenAIProvider
 
 
 def make_event(i: int, message: str) -> LogEvent:
@@ -158,3 +159,60 @@ async def test_analyze_returns_partial_findings_when_quota_hits_mid_run(monkeypa
     assert result.chunks_analyzed == 1
     assert len(result.findings) == 1
     assert result.warnings
+
+
+async def test_connection_reports_success(monkeypatch):
+    settings = make_settings()
+    service = AnomalyService(settings)
+
+    async def fake_call_chunk(self, prompt):
+        return ChunkResult(findings=[])
+
+    monkeypatch.setattr(GeminiProvider, "call_chunk", fake_call_chunk)
+
+    result = await service.test_connection(provider="gemini")
+
+    assert result.success is True
+    assert result.model == settings.gemini_model
+
+
+async def test_connection_reports_failure_from_provider_call(monkeypatch):
+    settings = make_settings()
+    service = AnomalyService(settings)
+
+    async def fake_call_chunk(self, prompt):
+        raise LLMRequestError("upstream said no")
+
+    monkeypatch.setattr(GeminiProvider, "call_chunk", fake_call_chunk)
+
+    result = await service.test_connection(provider="gemini")
+
+    assert result.success is False
+    assert "upstream said no" in result.message
+
+
+async def test_connection_reports_failure_when_required_api_key_missing():
+    settings = make_settings()
+    service = AnomalyService(settings)
+
+    result = await service.test_connection(provider="openai", api_key=None)
+
+    assert result.success is False
+    assert "api_key" in result.message
+
+
+async def test_connection_does_not_raise_for_unreachable_base_url(monkeypatch):
+    settings = make_settings()
+    service = AnomalyService(settings)
+
+    async def fake_call_chunk(self, prompt):
+        raise LLMRequestError("Connection refused")
+
+    monkeypatch.setattr(OpenAIProvider, "call_chunk", fake_call_chunk)
+
+    result = await service.test_connection(
+        provider="openai", api_key="test-key", base_url="http://localhost:1/v1"
+    )
+
+    assert result.success is False
+    assert "Connection refused" in result.message

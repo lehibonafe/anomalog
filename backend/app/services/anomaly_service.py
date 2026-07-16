@@ -2,9 +2,14 @@ import asyncio
 from functools import lru_cache
 
 from app.config import Settings, get_settings
-from app.core.errors import LLMQuotaExceededError, LLMRequestError
+from app.core.errors import BadRequestError, LLMQuotaExceededError, LLMRequestError
 from app.core.rate_limiter import RateLimiter
-from app.schemas.analysis import AnalysisContext, AnalysisResponse, ChunkResult
+from app.schemas.analysis import (
+    AnalysisContext,
+    AnalysisResponse,
+    ChunkResult,
+    TestConnectionResponse,
+)
 from app.schemas.common import LogEvent
 from app.services import log_filter
 from app.services.llm.base import LLMProvider, LLMRateLimited, ProviderDefaults
@@ -87,6 +92,60 @@ class AnomalyService:
             lines_skipped_by_prefilter=skipped,
             model=effective_model,
             warnings=warnings,
+        )
+
+    async def test_connection(
+        self,
+        *,
+        provider: str,
+        api_key: str | None = None,
+        model: str | None = None,
+        base_url: str | None = None,
+    ) -> TestConnectionResponse:
+        """One-shot connectivity check: builds the provider client and makes a
+        single minimal call_chunk, reporting success/failure as a normal 200
+        response rather than raising — this is a diagnostic, not an operation
+        that should surface as a request error."""
+        provider_cls = get_provider_class(provider)
+        defaults = self._defaults[provider]
+        effective_model = model or defaults.model
+        effective_base_url = base_url or defaults.base_url
+
+        try:
+            instance = provider_cls(
+                api_key=api_key,
+                model=effective_model,
+                base_url=effective_base_url,
+                settings=self.settings,
+            )
+        except BadRequestError as e:
+            return TestConnectionResponse(success=False, message=e.message, model=effective_model)
+
+        test_event = LogEvent(
+            source="cloudwatch",
+            origin="connection-test",
+            stream_or_key="connection-test",
+            message="INFO connection test line",
+            line_index=0,
+        )
+        prompt = build_prompt(
+            [test_event],
+            AnalysisContext(source_description="Connection test"),
+            user_prompt="Reply with an empty findings list to confirm the connection works.",
+        )
+        try:
+            await instance.call_chunk(prompt)
+        except LLMRateLimited as e:
+            return TestConnectionResponse(
+                success=False, message=f"Rate limited: {e}", model=effective_model
+            )
+        except (LLMQuotaExceededError, LLMRequestError) as e:
+            return TestConnectionResponse(success=False, message=e.message, model=effective_model)
+        except Exception as e:
+            return TestConnectionResponse(success=False, message=str(e), model=effective_model)
+
+        return TestConnectionResponse(
+            success=True, message="Connected successfully.", model=effective_model
         )
 
     async def _call_chunk(

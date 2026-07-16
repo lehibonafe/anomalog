@@ -5,8 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 **TraceMind** — a local web app for investigating AWS CloudWatch Logs and
-S3-stored logs: pick a source (log group(s), or bucket+prefix) and time range,
-view matching log lines, and run an LLM analysis over the filtered slice —
+CloudTrail events: pick a source (log group(s), or CloudTrail lookup
+attributes) and time range, view matching log lines, and run an LLM analysis
+over the filtered slice —
 by default flagging errors/exceptions/stack traces/anomalies, or steered by an
 optional user-supplied prompt (Gemini free tier by default; OpenAI/Anthropic/
 Ollama opt-in per request). Two services: `backend/` (FastAPI) and
@@ -74,7 +75,7 @@ host's `~/.aws` read-only to `/root/.aws` (container runs as root), and
 
 ```
 Browser (React/Vite, :5173) → axios (JSON) → FastAPI backend (:8000)
-                                                 ├── boto3 → CloudWatch Logs / S3
+                                                 ├── boto3 → CloudWatch Logs / CloudTrail
                                                  └── provider SDKs → Gemini (default) /
                                                      OpenAI / Anthropic / Ollama
 ```
@@ -123,7 +124,7 @@ keep them in sync. If you change how events are fetched/merged, preserve this:
 
 `services/masking.py::mask_message` is applied unconditionally to every
 `LogEvent.message` at the source — inline in `cloudwatch_service.search_log_events`
-and `s3_service.fetch_object_content`, before `line_index` is assigned. It
+and `cloudtrail_service.lookup_events`, before `line_index` is assigned. It
 regex-redacts credentials/secrets (AWS access keys, JWTs, Bearer/Basic auth
 headers, `password=`/`api_key=`/etc. key-value pairs) and PII (emails, SSNs,
 phone numbers, credit card numbers validated via Luhn to avoid false-positiving
@@ -143,11 +144,7 @@ just a large response. The frontend mirrors this client-side
 (`utils/time.ts::exceedsMaxTimeRange`, used in `TimeRangePicker` and
 `CloudWatchSourcePicker`) to block the search button before the request fires;
 the backend check is the actual enforcement point since the frontend one is
-only a UX nicety. S3's `list_objects` start/end filtering is deliberately left
-uncapped — per the S3 section below, it already lists the whole prefix from
-AWS and filters by `LastModified` client-side, so a time cap there wouldn't
-reduce the underlying `ListObjectsV2` cost the way it does for CloudWatch;
-prefix-scoping is the actual cost lever for S3.
+only a UX nicety.
 
 ### CloudWatch multi-group search pagination
 
@@ -159,16 +156,6 @@ packs each group's remaining `nextToken` into a single opaque base64 JSON
 it's exhausted and won't be queried again on the next page. If you need
 large-scale/complex querying, CloudWatch Logs Insights (`start_query`) is the
 noted upgrade path — not implemented here.
-
-### S3 content fetching
-
-`s3_service.fetch_object_content` streams `.gz` keys through
-`gzip.GzipFile(fileobj=body)` and caps the **decompressed** byte count (not
-raw compressed bytes) — capping raw gzip bytes mid-stream produces a corrupt-
-stream error instead of a clean truncation. S3 time-range filtering
-(`list_objects`) is client-side on `LastModified` after `list_objects_v2` —
-there's no server-side date filter in that API, so very large prefixes should
-be scoped with a tighter key prefix.
 
 ### Multi-provider LLM abstraction (`services/llm/` + `anomaly_service.py`)
 
@@ -256,7 +243,7 @@ defaults live as constants in each `services/llm/<name>_provider.py`.
 ### Frontend state split
 
 - **TanStack Query** owns all server calls (log groups, CloudWatch search,
-  S3 listing/content, the analysis call as a `useMutation`) — see
+  CloudTrail lookup, the analysis call as a `useMutation`) — see
   `frontend/src/hooks/`.
 - **Zustand** (`frontend/src/state/selectionStore.ts`) owns cross-component UI
   state that isn't server state: current source/selection, the loaded

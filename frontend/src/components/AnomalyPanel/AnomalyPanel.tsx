@@ -2,6 +2,7 @@ import { isAxiosError } from "axios";
 import { useState } from "react";
 
 import { useAnomalyAnalysis } from "../../hooks/useAnomalyAnalysis";
+import { useTestConnection } from "../../hooks/useTestConnection";
 import type { LlmProvider } from "../../state/selectionStore";
 import { useSelectionStore } from "../../state/selectionStore";
 import { FindingCard } from "./FindingCard";
@@ -25,6 +26,7 @@ export function AnomalyPanel() {
   const setLlmBaseUrl = useSelectionStore((s) => s.setLlmBaseUrl);
   const [userPrompt, setUserPrompt] = useState("");
   const analysis = useAnomalyAnalysis();
+  const testConnection = useTestConnection();
 
   const quotaExceeded =
     analysis.isError && isAxiosError(analysis.error) && analysis.error.response?.status === 429;
@@ -84,6 +86,26 @@ export function AnomalyPanel() {
                 "localhost" inside the container won't reach the host — use
                 host.docker.internal instead. */}
           </label>
+        )}
+
+        <button
+          type="button"
+          className="btn-block"
+          disabled={testConnection.isPending}
+          onClick={() => testConnection.mutate()}
+        >
+          {testConnection.isPending && <span className="spinner" />}
+          {testConnection.isPending ? "Testing..." : "Test connection"}
+        </button>
+        {testConnection.isSuccess && (
+          <p className={testConnection.data.success ? "success-text" : "error-text"}>
+            {testConnection.data.success
+              ? `Connected (model: ${testConnection.data.model})`
+              : testConnection.data.message}
+          </p>
+        )}
+        {testConnection.isError && (
+          <p className="error-text">Test failed. Check the backend logs.</p>
         )}
       </details>
 

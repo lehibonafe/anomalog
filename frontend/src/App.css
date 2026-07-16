@@ -365,6 +365,15 @@
   margin-top: 0.4rem;
 }
 
+.success-text {
+  color: var(--severity-success);
+  font-size: 0.8rem;
+  background-color: var(--severity-success-bg);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.65rem;
+  margin-top: 0.4rem;
+}
+
 .model-settings {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);

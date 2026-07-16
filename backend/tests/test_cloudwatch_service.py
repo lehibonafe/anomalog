@@ -94,6 +94,35 @@ def test_search_log_events_merges_and_sorts_across_groups(mock_get_client):
 
 
 @patch("app.services.cloudwatch_service.get_logs_client")
+def test_search_log_events_masks_sensitive_data(mock_get_client):
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.filter_log_events.return_value = {
+        "events": [
+            {
+                "logStreamName": "s1",
+                "timestamp": 1000,
+                "message": "user login: jane.doe@example.com",
+            },
+        ]
+    }
+
+    settings = make_settings()
+    result = cloudwatch_service.search_log_events(
+        log_group_names=["group-a"],
+        start_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        end_time=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        filter_pattern=None,
+        limit=100,
+        cursor=None,
+        settings=settings,
+    )
+
+    assert "jane.doe@example.com" not in result.events[0].message
+    assert "***MASKED***" in result.events[0].message
+
+
+@patch("app.services.cloudwatch_service.get_logs_client")
 def test_search_log_events_builds_cursor_when_more_pages_exist(mock_get_client):
     mock_client = MagicMock()
     mock_get_client.return_value = mock_client

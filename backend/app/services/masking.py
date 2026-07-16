@@ -1,6 +1,6 @@
 """Masks credentials/secrets and PII in log message text.
 
-Applied unconditionally at the source (cloudwatch_service/s3_service) before
+Applied unconditionally at the source (cloudwatch_service/cloudtrail_service) before
 line_index is assigned, so the masked text is what both the UI displays and
 what gets sent to any LLM provider for analysis — see the line-index contract
 in CLAUDE.md.

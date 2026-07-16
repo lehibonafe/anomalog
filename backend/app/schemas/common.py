@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 
 class LogEvent(BaseModel):
-    source: Literal["cloudwatch", "s3", "cloudtrail"]
+    source: Literal["cloudwatch", "cloudtrail"]
     origin: str
     stream_or_key: str
     timestamp: datetime | None = None

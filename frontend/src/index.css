@@ -19,6 +19,8 @@
   --severity-warning-bg: rgba(224, 161, 58, 0.12);
   --severity-info: #4ba3e0;
   --severity-info-bg: rgba(75, 163, 224, 0.12);
+  --severity-success: #3fb572;
+  --severity-success-bg: rgba(63, 181, 114, 0.12);
 
   --radius-sm: 5px;
   --radius-md: 8px;
@@ -58,6 +60,7 @@
     --severity-critical-bg: rgba(217, 62, 68, 0.08);
     --severity-warning-bg: rgba(191, 128, 15, 0.08);
     --severity-info-bg: rgba(38, 120, 176, 0.08);
+    --severity-success-bg: rgba(38, 143, 89, 0.08);
 
     color-scheme: light;
   }

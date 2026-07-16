@@ -1,4 +1,4 @@
-export type LogSource = "cloudwatch" | "s3" | "cloudtrail";
+export type LogSource = "cloudwatch" | "cloudtrail";
 
 export interface LogEvent {
   source: LogSource;
@@ -62,44 +62,6 @@ export interface CloudTrailSearchResponse {
   total_returned: number;
 }
 
-export interface S3Bucket {
-  name: string;
-  creation_date: string | null;
-}
-
-export interface S3BucketsResponse {
-  buckets: S3Bucket[];
-}
-
-export interface S3Object {
-  key: string;
-  size: number;
-  last_modified: string;
-}
-
-export interface S3ObjectsResponse {
-  objects: S3Object[];
-  continuation_token: string | null;
-}
-
-export interface S3ContentRequest {
-  bucket: string;
-  keys: string[];
-}
-
-export interface S3ObjectContentInfo {
-  key: string;
-  byte_size: number;
-  truncated: boolean;
-  line_count: number;
-}
-
-export interface S3ContentResponse {
-  events: LogEvent[];
-  objects: S3ObjectContentInfo[];
-  truncated_overall: boolean;
-}
-
 export type FindingSeverity = "critical" | "warning" | "info";
 export type FindingCategory = "error" | "stack_trace" | "anomaly" | "pattern";
 
@@ -123,6 +85,19 @@ export interface AnalysisRequest {
   model?: string | null;
   base_url?: string | null;
   user_prompt?: string | null;
+}
+
+export interface TestConnectionRequest {
+  provider?: LlmProviderName;
+  api_key?: string | null;
+  model?: string | null;
+  base_url?: string | null;
+}
+
+export interface TestConnectionResponse {
+  success: boolean;
+  message: string;
+  model: string;
 }
 
 export interface AnalysisResponse {

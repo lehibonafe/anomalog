@@ -1,11 +1,11 @@
 # TraceMind
 
-Local web app for investigating AWS CloudWatch Logs and S3-stored logs: pick a
-source (log groups, or bucket + prefix) and a time range, browse the matching
-log lines, then run an LLM analysis over the filtered slice — either the
-default error/anomaly scan, or a custom prompt ("find all failed logins for
-user X"). Findings cite line numbers and click-to-highlight the matching lines
-in the viewer.
+Local web app for investigating AWS CloudWatch Logs and CloudTrail events: pick
+a source (log groups, or CloudTrail lookup attributes) and a time range,
+browse the matching log lines, then run an LLM analysis over the filtered
+slice — either the default error/anomaly scan, or a custom prompt ("find all
+failed logins for user X"). Findings cite line numbers and click-to-highlight
+the matching lines in the viewer.
 
 Supported LLM providers: **Gemini** (default — free tier, server-configured
 key) plus **OpenAI**, **Anthropic**, and **Ollama** (local), each opt-in per
@@ -91,8 +91,8 @@ Then open http://localhost:5173.
 
 ## Usage
 
-1. Pick a source in the sidebar: CloudWatch log group(s), or an S3 bucket +
-   key prefix.
+1. Pick a source in the sidebar: CloudWatch log group(s), or CloudTrail
+   lookup attributes.
 2. Set a time range and load the logs. Keep ranges narrow — everything is
    fetched through paginated AWS reads.
 3. (Optional) Type a prompt in the analysis panel to steer the LLM; leave it
@@ -113,7 +113,7 @@ Beyond that:
   are **browser-facing** values: set them to the host's public address, not
   `localhost`, and keep them consistent with the exact origin you browse from.
 - On EC2, prefer an instance IAM role over exported keys: leave `AWS_PROFILE`
-  unset and attach CloudWatch Logs/S3 read policies to the role. If the
+  unset and attach CloudWatch Logs/CloudTrail read policies to the role. If the
   backend runs in Docker, raise the IMDS hop limit so the container can reach
   role credentials:
   `aws ec2 modify-instance-metadata-options --http-put-response-hop-limit 2`.

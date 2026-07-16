@@ -23,10 +23,6 @@ class Settings(BaseSettings):
     max_line_length: int = 2000
     chunk_size_lines: int = 250
 
-    # S3
-    max_s3_object_bytes: int = 2_000_000
-    max_s3_total_bytes: int = 5_000_000
-
     cors_origins: list[str] = ["http://localhost:5173"]
 
     model_config = SettingsConfigDict(env_file=".env", env_prefix="", extra="ignore")
