@@ -37,10 +37,9 @@ class OpenAIProvider(LLMProvider):
 
     async def call_chunk(self, prompt: str) -> ChunkResult:
         try:
-            completion = await self.client.chat.completions.parse(
+            completion = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
-                response_format=ChunkResult,
                 temperature=0.1,
             )
         except openai.RateLimitError as e:
@@ -53,6 +52,6 @@ class OpenAIProvider(LLMProvider):
         message = completion.choices[0].message
         if message.refusal:
             raise LLMRequestError(f"Model refused: {message.refusal}")
-        if message.parsed is None:
-            raise LLMRequestError("Model did not return parseable structured output")
-        return message.parsed
+        if not message.content:
+            raise LLMRequestError("Model returned an empty response")
+        return ChunkResult(analysis=message.content)

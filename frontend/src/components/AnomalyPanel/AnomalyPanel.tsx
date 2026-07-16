@@ -5,7 +5,7 @@ import { useAnomalyAnalysis } from "../../hooks/useAnomalyAnalysis";
 import { useTestConnection } from "../../hooks/useTestConnection";
 import type { LlmProvider } from "../../state/selectionStore";
 import { useSelectionStore } from "../../state/selectionStore";
-import { FindingCard } from "./FindingCard";
+import { AnalysisResult } from "./AnalysisResult";
 
 const PROVIDER_MODEL_PLACEHOLDER: Record<LlmProvider, string> = {
   gemini: "gemini-2.5-flash",
@@ -163,14 +163,11 @@ export function AnomalyPanel() {
               {w}
             </p>
           ))}
-          {analysis.data.findings.length === 0 && (
-            <p className="hint">No findings for this slice.</p>
+          {!analysis.data.analysis.trim() ? (
+            <p className="hint">No analysis text for this slice.</p>
+          ) : (
+            <AnalysisResult text={analysis.data.analysis} />
           )}
-          <div className="finding-list">
-            {analysis.data.findings.map((f) => (
-              <FindingCard key={f.id} finding={f} />
-            ))}
-          </div>
         </>
       )}
     </div>

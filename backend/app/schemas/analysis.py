@@ -32,22 +32,12 @@ class TestConnectionResponse(BaseModel):
     model: str
 
 
-class Finding(BaseModel):
-    id: str
-    severity: str
-    category: Literal["error", "stack_trace", "anomaly", "pattern"]
-    line_index_start: int
-    line_index_end: int
-    excerpt: str
-    explanation: str
-
-
 class ChunkResult(BaseModel):
-    findings: list[Finding]
+    analysis: str
 
 
 class AnalysisResponse(BaseModel):
-    findings: list[Finding]
+    analysis: str
     chunks_analyzed: int
     chunks_total: int
     lines_considered: int

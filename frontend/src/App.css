@@ -436,65 +436,32 @@
   padding: 0.25rem 0.6rem;
 }
 
-.finding-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
+.analysis-result {
   margin-top: 0.75rem;
-}
-
-.finding-card {
+  padding: 0.7rem 0.8rem;
   border: 1px solid var(--border-color);
-  border-left-width: 3px;
   border-radius: var(--radius-md);
   background-color: var(--bg-surface-raised);
-  padding: 0.6rem 0.7rem;
-  cursor: pointer;
-  font-size: 0.8rem;
-  transition: box-shadow 0.15s, transform 0.15s;
-}
-
-.finding-card:hover {
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-1px);
-}
-
-.finding-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.68rem;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--text-tertiary);
-  margin-bottom: 0.4rem;
-}
-
-.severity-pill {
-  font-weight: 700;
-  padding: 0.1rem 0.45rem;
-  border-radius: 999px;
-  color: var(--text-secondary);
-  background-color: var(--bg-surface-raised);
-}
-
-.finding-lines {
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
-}
-
-.finding-excerpt {
-  font-family: ui-monospace, monospace;
-  font-size: 0.74rem;
-  white-space: pre-wrap;
-  background-color: var(--bg-canvas);
-  border-radius: var(--radius-sm);
-  padding: 0.4rem 0.5rem;
-  margin-bottom: 0.4rem;
-  color: var(--text-secondary);
-}
-
-.finding-explanation {
-  font-size: 0.8rem;
+  font-size: 0.82rem;
+  line-height: 1.6;
   color: var(--text-primary);
+  white-space: pre-wrap;
+}
+
+.line-ref {
+  display: inline;
+  border: none;
+  padding: 0.05rem 0.3rem;
+  margin: 0 0.05rem;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--accent);
+  background-color: var(--accent-bg);
+  cursor: pointer;
+}
+
+.line-ref:hover {
+  color: var(--accent-hover);
 }

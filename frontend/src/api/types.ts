@@ -62,19 +62,6 @@ export interface CloudTrailSearchResponse {
   total_returned: number;
 }
 
-export type FindingSeverity = string;
-export type FindingCategory = "error" | "stack_trace" | "anomaly" | "pattern";
-
-export interface Finding {
-  id: string;
-  severity: FindingSeverity;
-  category: FindingCategory;
-  line_index_start: number;
-  line_index_end: number;
-  excerpt: string;
-  explanation: string;
-}
-
 export type LlmProviderName = "gemini" | "openai" | "anthropic" | "ollama";
 
 export interface AnalysisRequest {
@@ -101,7 +88,7 @@ export interface TestConnectionResponse {
 }
 
 export interface AnalysisResponse {
-  findings: Finding[];
+  analysis: string;
   chunks_analyzed: number;
   chunks_total: number;
   lines_considered: number;

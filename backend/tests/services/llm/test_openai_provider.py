@@ -6,7 +6,6 @@ import pytest
 
 from app.config import Settings
 from app.core.errors import BadRequestError, LLMRequestError
-from app.schemas.analysis import ChunkResult, Finding
 from app.services.llm.base import LLMRateLimited
 from app.services.llm.openai_provider import OpenAIProvider
 
@@ -31,41 +30,28 @@ def test_requires_api_key():
         make_provider(api_key=None)
 
 
-async def test_call_chunk_returns_parsed_result():
+async def test_call_chunk_returns_text_result():
     provider = make_provider()
     fake_message = MagicMock()
     fake_message.refusal = None
-    fake_message.parsed = ChunkResult(
-        findings=[
-            Finding(
-                id="f1",
-                severity="critical",
-                category="error",
-                line_index_start=0,
-                line_index_end=0,
-                excerpt="x",
-                explanation="y",
-            )
-        ]
-    )
+    fake_message.content = "line [0] looks fine."
     fake_completion = MagicMock()
     fake_completion.choices = [MagicMock(message=fake_message)]
-    provider.client.chat.completions.parse = AsyncMock(return_value=fake_completion)
+    provider.client.chat.completions.create = AsyncMock(return_value=fake_completion)
 
     result = await provider.call_chunk("prompt")
 
-    assert len(result.findings) == 1
-    assert result.findings[0].id == "f1"
+    assert result.analysis == "line [0] looks fine."
 
 
 async def test_call_chunk_raises_request_error_on_refusal():
     provider = make_provider()
     fake_message = MagicMock()
     fake_message.refusal = "cannot help with that"
-    fake_message.parsed = None
+    fake_message.content = None
     fake_completion = MagicMock()
     fake_completion.choices = [MagicMock(message=fake_message)]
-    provider.client.chat.completions.parse = AsyncMock(return_value=fake_completion)
+    provider.client.chat.completions.create = AsyncMock(return_value=fake_completion)
 
     with pytest.raises(LLMRequestError):
         await provider.call_chunk("prompt")
@@ -73,7 +59,7 @@ async def test_call_chunk_raises_request_error_on_refusal():
 
 async def test_call_chunk_raises_rate_limited_on_429():
     provider = make_provider()
-    provider.client.chat.completions.parse = AsyncMock(side_effect=make_rate_limit_error())
+    provider.client.chat.completions.create = AsyncMock(side_effect=make_rate_limit_error())
 
     with pytest.raises(LLMRateLimited):
         await provider.call_chunk("prompt")

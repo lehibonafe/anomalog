@@ -1,4 +1,3 @@
-import json
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -26,23 +25,25 @@ def test_defaults_base_url_and_key_when_omitted():
     assert str(provider.client.base_url).rstrip("/") == DEFAULT_BASE_URL.rstrip("/")
 
 
-async def test_call_chunk_parses_json_object_response():
+async def test_call_chunk_returns_text_response():
     provider = make_provider()
     fake_message = MagicMock()
-    fake_message.content = json.dumps({"findings": []})
+    fake_message.refusal = None
+    fake_message.content = "line [0] looks fine."
     fake_completion = MagicMock()
     fake_completion.choices = [MagicMock(message=fake_message)]
     provider.client.chat.completions.create = AsyncMock(return_value=fake_completion)
 
     result = await provider.call_chunk("prompt")
 
-    assert result.findings == []
+    assert result.analysis == "line [0] looks fine."
 
 
-async def test_call_chunk_raises_request_error_on_malformed_json():
+async def test_call_chunk_raises_request_error_on_empty_response():
     provider = make_provider()
     fake_message = MagicMock()
-    fake_message.content = "not json"
+    fake_message.refusal = None
+    fake_message.content = None
     fake_completion = MagicMock()
     fake_completion.choices = [MagicMock(message=fake_message)]
     provider.client.chat.completions.create = AsyncMock(return_value=fake_completion)

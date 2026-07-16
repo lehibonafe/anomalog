@@ -9,8 +9,6 @@ DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 DEFAULT_RPM = 50
 DEFAULT_MAX_RETRIES = 2
 
-_TOOL_NAME = "report_findings"
-
 
 class AnthropicProvider(LLMProvider):
     name = "anthropic"
@@ -37,17 +35,10 @@ class AnthropicProvider(LLMProvider):
         self.model = model
 
     async def call_chunk(self, prompt: str) -> ChunkResult:
-        tool = {
-            "name": _TOOL_NAME,
-            "description": "Report the anomaly findings extracted from this log chunk.",
-            "input_schema": ChunkResult.model_json_schema(),
-        }
         try:
             response = await self.client.messages.create(
                 model=self.model,
                 max_tokens=4096,
-                tools=[tool],
-                tool_choice={"type": "tool", "name": _TOOL_NAME},
                 messages=[{"role": "user", "content": prompt}],
             )
         except anthropic.RateLimitError as e:
@@ -58,6 +49,6 @@ class AnthropicProvider(LLMProvider):
             raise LLMRequestError(str(e)) from e
 
         for block in response.content:
-            if block.type == "tool_use" and block.name == _TOOL_NAME:
-                return ChunkResult.model_validate(block.input)
-        raise LLMRequestError("Anthropic response did not contain the expected tool call")
+            if block.type == "text":
+                return ChunkResult(analysis=block.text)
+        raise LLMRequestError("Anthropic response did not contain any text content")

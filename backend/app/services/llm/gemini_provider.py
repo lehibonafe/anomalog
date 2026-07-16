@@ -35,13 +35,9 @@ class GeminiProvider(LLMProvider):
             resp = await self.client.aio.models.generate_content(
                 model=self.model,
                 contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=ChunkResult,
-                    temperature=0.1,
-                ),
+                config=types.GenerateContentConfig(temperature=0.1),
             )
-            return ChunkResult.model_validate_json(resp.text)
+            return ChunkResult(analysis=resp.text)
         except genai.errors.ClientError as e:
             if getattr(e, "code", None) == 429:
                 raise LLMRateLimited(str(e)) from e

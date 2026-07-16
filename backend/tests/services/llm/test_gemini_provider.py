@@ -1,4 +1,3 @@
-import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -19,15 +18,15 @@ def make_provider() -> GeminiProvider:
     return GeminiProvider(api_key=None, model="gemini-2.5-flash", base_url=None, settings=settings)
 
 
-async def test_call_chunk_parses_structured_response():
+async def test_call_chunk_returns_text_response():
     provider = make_provider()
     fake_response = MagicMock()
-    fake_response.text = json.dumps({"findings": []})
+    fake_response.text = "line [0] looks fine."
     provider.client.aio.models.generate_content = AsyncMock(return_value=fake_response)
 
     result = await provider.call_chunk("prompt")
 
-    assert result.findings == []
+    assert result.analysis == "line [0] looks fine."
 
 
 async def test_call_chunk_raises_rate_limited_on_429():

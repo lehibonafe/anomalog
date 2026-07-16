@@ -107,18 +107,22 @@ environment. `get_boto3_session` therefore deletes an empty `AWS_PROFILE` from
 `os.environ` before building the session — keep that behavior if you touch
 `aws_session.py`.
 
-### The line-index contract (ties LLM findings back to on-screen log lines)
+### The line-index contract (ties LLM output back to on-screen log lines)
 
 Every `LogEvent` (`backend/app/schemas/common.py`) carries a server-assigned
 `line_index`, stable within one response. The frontend stores whatever
 `LogEvent[]` a search/fetch returns and sends that *exact same array back
-unchanged* to `POST /api/analysis/anomalies`. Every provider is prompted (via
-the shared `build_prompt` in `services/llm/prompt.py`) to cite `line_index`
-values from the bracketed line numbers, never invented ones, so a
-`Finding.line_index_start/end` in the response always resolves against what's
-currently rendered in `LogViewer` — no server-side session or cache needed to
-keep them in sync. If you change how events are fetched/merged, preserve this:
-`line_index` must be assigned once, in final display order, per response.
+unchanged* to `POST /api/analysis/anomalies`. The shared `build_prompt`
+(`services/llm/prompt.py`) tells the LLM to write a plain-language analysis
+but to inline-cite `line_index` values from the bracketed line numbers when it
+refers to specific lines (e.g. `[42]` or `[42-45]`), never invented ones. The
+LLM's response is free text, not structured JSON — the frontend
+(`AnalysisResult.tsx`) regex-matches those bracketed refs out of the text at
+render time and turns each into a clickable element that sets
+`highlightedRange`, so it always resolves against what's currently rendered in
+`LogViewer` — no server-side session or cache needed to keep them in sync. If
+you change how events are fetched/merged, preserve this: `line_index` must be
+assigned once, in final display order, per response.
 
 ### Sensitive data masking
 
@@ -165,46 +169,36 @@ Ollama (local) — selected per-request via `AnalysisRequest.provider`
 `AnalysisRequest.user_prompt` (optional) swaps only the instruction block
 inside the shared `build_prompt`: blank → the default anomaly/error scan;
 set → the LLM answers the user's request instead. Both modes return the same
-structured `Finding`s citing `line_index` values, so the line-index contract
-and click-to-highlight work identically — don't fork the output schema per
-mode. Only Gemini
-has a server-configured default key (`Settings.gemini_api_key`, required at
-boot); the other three are purely opt-in via the frontend's "Model settings"
-override fields (`AnomalyPanel.tsx`) — there are no required `Settings`
-fields for them, so the app still boots with zero config beyond today's
-Gemini key.
+shape — free-form prose citing `line_index` values inline — so the
+line-index contract and click-to-highlight work identically; don't fork the
+output format per mode. Only Gemini has a server-configured default key
+(`Settings.gemini_api_key`, required at boot); the other three are purely
+opt-in via the frontend's "Model settings" override fields
+(`AnomalyPanel.tsx`) — there are no required `Settings` fields for them, so
+the app still boots with zero config beyond today's Gemini key.
 
 Each provider lives in `backend/app/services/llm/<name>_provider.py` and
 implements the `LLMProvider` ABC (`services/llm/base.py`): constructed fresh
 per `analyze()` call (never shared, so a frontend-supplied key never leaks
 across requests), exposing `async call_chunk(prompt) -> ChunkResult` that
-makes exactly one upstream call. Structured JSON output is handled
-differently per provider's actual capabilities — don't assume they're
-interchangeable:
-- **Gemini**: native `response_schema` (the `ChunkResult` Pydantic class
-  passed directly) via `google-genai`'s structured-output mode.
-- **OpenAI**: `client.chat.completions.parse(response_format=ChunkResult)` —
-  the SDK derives its own strict JSON schema from the Pydantic model
-  internally (see gotcha below).
-- **Anthropic**: forced tool-use (`tool_choice={"type":"tool","name":...}`),
-  result read off the `tool_use` content block's `.input`.
-- **Ollama** (`OllamaProvider(OpenAIProvider)`): reuses the OpenAI SDK
-  pointed at `base_url="http://localhost:11434/v1"` (Ollama's compat layer),
-  but plain JSON mode (`response_format={"type":"json_object"}`) + manual
-  `ChunkResult.model_validate_json(...)` instead of `.parse()` — Ollama's
-  compat layer doesn't reliably honor OpenAI's strict `json_schema` mode
-  ([ollama/ollama#10001](https://github.com/ollama/ollama/issues/10001)).
-
-**Gotcha**: `Finding`/`ChunkResult` (`schemas/analysis.py`) must stay plain
-`BaseModel`s — do **not** add `model_config = ConfigDict(extra="forbid")` to
-satisfy Anthropic's optional `strict: true` tool flag. That was tried and
-broke Gemini: `extra="forbid"` makes `model_json_schema()` emit
-`additionalProperties: false`, and Gemini's `response_schema` API rejects
-that keyword outright (`400 INVALID_ARGUMENT ... Unknown name
-"additional_properties"`). OpenAI's `.parse()` is unaffected either way — it
-builds its own independent strict schema from the model regardless of
-`extra`. Anthropic's forced `tool_choice` alone (without `strict`) is
-reliable enough for this use case.
+makes exactly one upstream call and returns `ChunkResult(analysis: str)` —
+plain text, not schema-validated JSON. The LLM is deliberately **not**
+constrained to any structured output mode here (no `response_schema`,
+`.parse()`, forced tool-use, or JSON mode) — each provider just takes
+whatever plain-language text the model returns:
+- **Gemini**: `generate_content(contents=prompt)`, `resp.text` wrapped as-is.
+- **OpenAI**: `client.chat.completions.create(...)` (not `.parse()`),
+  `completion.choices[0].message.content`.
+- **Anthropic**: plain `messages.create(...)` with no `tools`/`tool_choice`,
+  reads the first `text`-type content block.
+- **Ollama** (`OllamaProvider(OpenAIProvider)`): inherits `call_chunk`
+  unchanged from `OpenAIProvider` — Ollama's `/v1/chat/completions` is
+  OpenAI-compatible and both now just want plain text back, so the provider
+  only overrides `__init__`/`resolve_defaults` (for the localhost base_url
+  and to not require an api_key). It used to need its own `call_chunk`
+  override to avoid OpenAI's strict `json_schema` mode
+  ([ollama/ollama#10001](https://github.com/ollama/ollama/issues/10001)),
+  but that's moot now that nothing requests structured output at all.
 
 Orchestration (provider-agnostic, must not change per-provider) lives in
 `AnomalyService.analyze` (`anomaly_service.py`, replaces the old
@@ -233,8 +227,9 @@ Orchestration (provider-agnostic, must not change per-provider) lives in
    catching the provider-internal `LLMRateLimited` signal); if the *first*
    chunk exhausts quota, the whole request raises `LLMQuotaExceededError`
    (→ HTTP 429); if quota runs out *after* some chunks succeeded, the request
-   returns HTTP 200 with the partial findings plus a `warnings` entry —
-   partial results are never discarded.
+   returns HTTP 200 with the partial analysis text (each successful chunk's
+   text joined with blank lines) plus a `warnings` entry — partial results
+   are never discarded.
 
 All log-volume tunables (caps, chunk size) live in `backend/app/config.py` as
 `Settings` fields, sourced from `backend/.env`; per-provider RPM/retries/model
@@ -249,8 +244,10 @@ defaults live as constants in each `services/llm/<name>_provider.py`.
   state that isn't server state: current source/selection, the loaded
   `LogEvent[]`, and `highlightedRange`. This exists because `LogViewer` and
   `AnomalyPanel` are sibling components that both need the same loaded events
-  and the currently-highlighted finding range.
-- Clicking a `FindingCard` sets `highlightedRange` in the store;
+  and the currently-highlighted range.
+- `AnalysisResult.tsx` regex-extracts bracketed `line_index` refs (e.g. `[42]`,
+  `[42-45]`) out of the LLM's free-text analysis and renders each as a
+  clickable element; clicking one sets `highlightedRange` in the store.
   `LogViewer` reacts to that via `useEffect` and calls the react-window `List`
   imperative API (`useListRef().current.scrollToRow(...)`) to scroll to and
   highlight the matching lines. Note: this project uses **react-window v2**,

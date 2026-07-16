@@ -32,40 +32,26 @@ def test_requires_api_key():
         make_provider(api_key=None)
 
 
-async def test_call_chunk_returns_parsed_result_from_tool_use_block():
+async def test_call_chunk_returns_text_from_text_block():
     provider = make_provider()
-    tool_block = MagicMock()
-    tool_block.type = "tool_use"
-    tool_block.name = "report_findings"
-    tool_block.input = {
-        "findings": [
-            {
-                "id": "f1",
-                "severity": "critical",
-                "category": "error",
-                "line_index_start": 0,
-                "line_index_end": 0,
-                "excerpt": "x",
-                "explanation": "y",
-            }
-        ]
-    }
+    text_block = MagicMock()
+    text_block.type = "text"
+    text_block.text = "line [0] looks fine."
     fake_response = MagicMock()
-    fake_response.content = [tool_block]
+    fake_response.content = [text_block]
     provider.client.messages.create = AsyncMock(return_value=fake_response)
 
     result = await provider.call_chunk("prompt")
 
-    assert len(result.findings) == 1
-    assert result.findings[0].id == "f1"
+    assert result.analysis == "line [0] looks fine."
 
 
-async def test_call_chunk_raises_request_error_when_no_tool_use_block():
+async def test_call_chunk_raises_request_error_when_no_text_block():
     provider = make_provider()
-    text_block = MagicMock()
-    text_block.type = "text"
+    other_block = MagicMock()
+    other_block.type = "image"
     fake_response = MagicMock()
-    fake_response.content = [text_block]
+    fake_response.content = [other_block]
     provider.client.messages.create = AsyncMock(return_value=fake_response)
 
     with pytest.raises(LLMRequestError):

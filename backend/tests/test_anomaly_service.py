@@ -4,7 +4,7 @@ import pytest
 
 from app.config import Settings
 from app.core.errors import BadRequestError, LLMQuotaExceededError, LLMRequestError
-from app.schemas.analysis import AnalysisContext, ChunkResult, Finding
+from app.schemas.analysis import AnalysisContext, ChunkResult
 from app.schemas.common import LogEvent
 from app.services.anomaly_service import AnomalyService
 from app.services.llm.gemini_provider import GeminiProvider
@@ -31,19 +31,7 @@ async def test_analyze_returns_findings_from_single_chunk(monkeypatch):
     service = AnomalyService(settings)
 
     async def fake_call_chunk(self, prompt):
-        return ChunkResult(
-            findings=[
-                Finding(
-                    id="f1",
-                    severity="critical",
-                    category="error",
-                    line_index_start=0,
-                    line_index_end=0,
-                    excerpt="ERROR boom",
-                    explanation="something broke",
-                )
-            ]
-        )
+        return ChunkResult(analysis="[0] something broke: ERROR boom")
 
     monkeypatch.setattr(GeminiProvider, "call_chunk", fake_call_chunk)
 
@@ -51,8 +39,7 @@ async def test_analyze_returns_findings_from_single_chunk(monkeypatch):
     result = await service.analyze(events, AnalysisContext(source_description="test"))
 
     assert result.chunks_analyzed == 1
-    assert len(result.findings) == 1
-    assert result.findings[0].id == "f1"
+    assert result.analysis == "[0] something broke: ERROR boom"
     assert result.warnings == []
     assert result.model == settings.gemini_model
 
@@ -65,7 +52,7 @@ async def test_analyze_defaults_to_gemini_provider(monkeypatch):
 
     async def fake_call_chunk(self, prompt):
         called["count"] += 1
-        return ChunkResult(findings=[])
+        return ChunkResult(analysis="")
 
     monkeypatch.setattr(GeminiProvider, "call_chunk", fake_call_chunk)
 
@@ -95,7 +82,7 @@ async def test_analyze_with_user_prompt_reaches_llm_and_skips_prefilter(monkeypa
 
     async def fake_call_chunk(self, prompt):
         seen_prompts.append(prompt)
-        return ChunkResult(findings=[])
+        return ChunkResult(analysis="")
 
     monkeypatch.setattr(GeminiProvider, "call_chunk", fake_call_chunk)
 
@@ -136,19 +123,7 @@ async def test_analyze_returns_partial_findings_when_quota_hits_mid_run(monkeypa
     async def flaky_call(chunk_events, context, provider, max_retries, user_prompt=None):
         call_count["n"] += 1
         if call_count["n"] == 1:
-            return ChunkResult(
-                findings=[
-                    Finding(
-                        id="f1",
-                        severity="warning",
-                        category="error",
-                        line_index_start=0,
-                        line_index_end=0,
-                        excerpt="x",
-                        explanation="y",
-                    )
-                ]
-            )
+            return ChunkResult(analysis="[0] warning: x")
         raise LLMQuotaExceededError("quota exceeded")
 
     monkeypatch.setattr(service, "_call_chunk", flaky_call)
@@ -157,7 +132,7 @@ async def test_analyze_returns_partial_findings_when_quota_hits_mid_run(monkeypa
     result = await service.analyze(events, AnalysisContext(source_description="test"))
 
     assert result.chunks_analyzed == 1
-    assert len(result.findings) == 1
+    assert result.analysis == "[0] warning: x"
     assert result.warnings
 
 
@@ -166,7 +141,7 @@ async def test_connection_reports_success(monkeypatch):
     service = AnomalyService(settings)
 
     async def fake_call_chunk(self, prompt):
-        return ChunkResult(findings=[])
+        return ChunkResult(analysis="")
 
     monkeypatch.setattr(GeminiProvider, "call_chunk", fake_call_chunk)
 

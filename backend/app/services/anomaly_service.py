@@ -59,7 +59,7 @@ class AnomalyService:
         relevant = log_filter.truncate_and_cap(relevant, self.settings)
         chunks = log_filter.chunk(relevant, self.settings)
 
-        findings = []
+        analyses: list[str] = []
         warnings: list[str] = []
         analyzed = 0
         for i, chunk_events in enumerate(chunks):
@@ -68,7 +68,7 @@ class AnomalyService:
                 result = await self._call_chunk(
                     chunk_events, context, instance, defaults.max_retries, user_prompt
                 )
-                findings.extend(result.findings)
+                analyses.append(result.analysis)
                 analyzed += 1
             except LLMQuotaExceededError as e:
                 if analyzed == 0:
@@ -85,7 +85,7 @@ class AnomalyService:
                 continue
 
         return AnalysisResponse(
-            findings=findings,
+            analysis="\n\n".join(analyses),
             chunks_analyzed=analyzed,
             chunks_total=len(chunks),
             lines_considered=len(relevant),
@@ -131,7 +131,7 @@ class AnomalyService:
         prompt = build_prompt(
             [test_event],
             AnalysisContext(source_description="Connection test"),
-            user_prompt="Reply with an empty findings list to confirm the connection works.",
+            user_prompt="Reply with a brief confirmation that the connection works.",
         )
         try:
             await instance.call_chunk(prompt)
