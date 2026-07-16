@@ -459,18 +459,6 @@
   transform: translateY(-1px);
 }
 
-.finding-card.severity-critical {
-  border-left-color: var(--severity-critical);
-}
-
-.finding-card.severity-warning {
-  border-left-color: var(--severity-warning);
-}
-
-.finding-card.severity-info {
-  border-left-color: var(--severity-info);
-}
-
 .finding-header {
   display: flex;
   align-items: center;
@@ -486,21 +474,8 @@
   font-weight: 700;
   padding: 0.1rem 0.45rem;
   border-radius: 999px;
-}
-
-.finding-card.severity-critical .severity-pill {
-  color: var(--severity-critical);
-  background-color: var(--severity-critical-bg);
-}
-
-.finding-card.severity-warning .severity-pill {
-  color: var(--severity-warning);
-  background-color: var(--severity-warning-bg);
-}
-
-.finding-card.severity-info .severity-pill {
-  color: var(--severity-info);
-  background-color: var(--severity-info-bg);
+  color: var(--text-secondary);
+  background-color: var(--bg-surface-raised);
 }
 
 .finding-lines {

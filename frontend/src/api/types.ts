@@ -62,7 +62,7 @@ export interface CloudTrailSearchResponse {
   total_returned: number;
 }
 
-export type FindingSeverity = "critical" | "warning" | "info";
+export type FindingSeverity = string;
 export type FindingCategory = "error" | "stack_trace" | "anomaly" | "pattern";
 
 export interface Finding {

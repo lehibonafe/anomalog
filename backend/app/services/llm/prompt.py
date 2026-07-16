@@ -29,6 +29,8 @@ def build_prompt(
         f"{context.source_description}\n\n"
         'Each line below is prefixed with its index in square brackets, e.g. "[42]".\n'
         f"{instruction}"
+        "For each finding's severity, use whatever word or short phrase best describes "
+        "how serious it is — you are not limited to a fixed set of severity labels.\n"
         "Reference EXACT line_index values from the brackets — never invent an index. "
         "If nothing matches, return an empty findings list.\n"
         "Return ONLY JSON matching this schema (no prose, no markdown fences):\n"

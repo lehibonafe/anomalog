@@ -34,7 +34,7 @@ class TestConnectionResponse(BaseModel):
 
 class Finding(BaseModel):
     id: str
-    severity: Literal["critical", "warning", "info"]
+    severity: str
     category: Literal["error", "stack_trace", "anomaly", "pattern"]
     line_index_start: int
     line_index_end: int

@@ -1,18 +1,12 @@
 import type { Finding } from "../../api/types";
 import { useSelectionStore } from "../../state/selectionStore";
 
-const SEVERITY_CLASS: Record<Finding["severity"], string> = {
-  critical: "severity-critical",
-  warning: "severity-warning",
-  info: "severity-info",
-};
-
 export function FindingCard({ finding }: { finding: Finding }) {
   const setHighlightedRange = useSelectionStore((s) => s.setHighlightedRange);
 
   return (
     <div
-      className={`finding-card ${SEVERITY_CLASS[finding.severity]}`}
+      className="finding-card"
       onClick={() =>
         setHighlightedRange({ start: finding.line_index_start, end: finding.line_index_end })
       }
