@@ -5,3 +5,6 @@ backend/**/__pycache__/
 backend/.pytest_cache/
 frontend/node_modules/
 frontend/dist/
+TraceMind_Documentation.docx
+
+    
