@@ -142,9 +142,11 @@ preserving the line-index contract above.
 
 `cloudwatch_service.search_log_events` rejects (`BadRequestError`, HTTP 400)
 any request where `end_time - start_time` exceeds `Settings.max_time_range_days`
-(default 7) — CloudWatch Logs `filter_log_events` is billed by data scanned
-across the queried range, so an unbounded range is an unbounded-cost query, not
-just a large response. The frontend mirrors this client-side
+(default 7). `filter_log_events` itself isn't metered per-GB-scanned the way
+CloudWatch Logs Insights queries are — it just reads data you've already paid
+to ingest/store — but an unbounded range still means unbounded pagination,
+more API calls, and a much larger response to process, so the cap keeps
+queries and analysis runs bounded. The frontend mirrors this client-side
 (`utils/time.ts::exceedsMaxTimeRange`, used in `TimeRangePicker` and
 `CloudWatchSourcePicker`) to block the search button before the request fires;
 the backend check is the actual enforcement point since the frontend one is

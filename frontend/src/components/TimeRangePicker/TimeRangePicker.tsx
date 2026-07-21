@@ -16,6 +16,15 @@ export function TimeRangePicker() {
   const [activePreset, setActivePreset] = useState<TimePreset | null>(null);
   const rangeTooLong = exceedsMaxTimeRange(startTime, endTime);
 
+  const nowLocal = toLocalInput(new Date().toISOString());
+  const startLocal = toLocalInput(startTime);
+  const endLocal = toLocalInput(endTime);
+  // datetime-local values are zero-padded "YYYY-MM-DDTHH:mm", so string
+  // comparison sorts the same as chronological order.
+  const startMax = endLocal && endLocal < nowLocal ? endLocal : nowLocal;
+  const endMin = startLocal || undefined;
+  const endMax = nowLocal;
+
   const applyPreset = (preset: TimePreset) => {
     const { start, end } = presetToRange(preset, new Date());
     setTimeRange(start, end);
@@ -54,9 +63,11 @@ export function TimeRangePicker() {
           Start
           <input
             type="datetime-local"
-            value={toLocalInput(startTime)}
+            value={startLocal}
+            max={startMax}
             onChange={(e) => {
-              setTimeRange(fromLocalInput(e.target.value), endTime);
+              const value = e.target.value > startMax ? startMax : e.target.value;
+              setTimeRange(fromLocalInput(value), endTime);
               setActivePreset(null);
             }}
           />
@@ -65,9 +76,14 @@ export function TimeRangePicker() {
           End
           <input
             type="datetime-local"
-            value={toLocalInput(endTime)}
+            value={endLocal}
+            min={endMin}
+            max={endMax}
             onChange={(e) => {
-              setTimeRange(startTime, fromLocalInput(e.target.value));
+              let value = e.target.value;
+              if (endMin && value < endMin) value = endMin;
+              if (value > endMax) value = endMax;
+              setTimeRange(startTime, fromLocalInput(value));
               setActivePreset(null);
             }}
           />
