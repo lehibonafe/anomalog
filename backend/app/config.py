@@ -15,6 +15,15 @@ class Settings(BaseSettings):
     gemini_max_chunks_per_analysis: int = 6
     gemini_max_retries: int = 2
 
+    # Masking service (external PII masking API — primary masker; falls back
+    # to local mask_message on failure)
+    masking_service_url: str | None = "https://pii.etapinc.com"
+    masking_service_api_key: str | None = None  # unset => external masking disabled, local-only
+    masking_service_mode: str = "pipeline"  # required by /api/mask/structured/; "pipeline" vs "webchat" just categorizes the session server-side
+    masking_service_timeout_s: float = 5.0
+    masking_service_verify_ssl: bool = False  # pii.etapinc.com has a self-signed cert today; set True once a trusted cert is issued
+    masking_service_batch_size: int = 200
+
     # Log volume caps
     max_time_range_days: int = 7
     max_log_search_lines: int = 5000

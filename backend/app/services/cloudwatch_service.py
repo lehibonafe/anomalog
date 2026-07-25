@@ -11,7 +11,7 @@ from app.schemas.cloudwatch import (
     LogGroupsResponse,
 )
 from app.schemas.common import LogEvent
-from app.services.masking import mask_message
+from app.services.masking import mask_messages_batch
 
 
 def _ms_to_dt(ms: int | None) -> datetime | None:
@@ -84,7 +84,7 @@ def search_log_events(
         tokens = {}
         active_groups = log_group_names
 
-    all_events: list[LogEvent] = []
+    raw_entries: list[tuple[str, str, datetime | None, str]] = []
     next_tokens: dict[str, str] = {}
     for name in active_groups:
         kwargs: dict = {
@@ -100,19 +100,30 @@ def search_log_events(
             kwargs["nextToken"] = token
         resp = client.filter_log_events(**kwargs)
         for e in resp.get("events", []):
-            all_events.append(
-                LogEvent(
-                    source="cloudwatch",
-                    origin=name,
-                    stream_or_key=e.get("logStreamName", ""),
-                    timestamp=_ms_to_dt(e.get("timestamp")),
-                    message=mask_message(e.get("message", "")),
-                    line_index=0,
+            raw_entries.append(
+                (
+                    name,
+                    e.get("logStreamName", ""),
+                    _ms_to_dt(e.get("timestamp")),
+                    e.get("message", ""),
                 )
             )
         new_token = resp.get("nextToken")
         if new_token:
             next_tokens[name] = new_token
+
+    masked_messages = mask_messages_batch([r[3] for r in raw_entries], settings)
+    all_events: list[LogEvent] = [
+        LogEvent(
+            source="cloudwatch",
+            origin=origin,
+            stream_or_key=stream,
+            timestamp=timestamp,
+            message=masked,
+            line_index=0,
+        )
+        for (origin, stream, timestamp, _raw), masked in zip(raw_entries, masked_messages)
+    ]
 
     all_events.sort(key=lambda ev: ev.timestamp or datetime.min.replace(tzinfo=timezone.utc))
     truncated = len(all_events) > effective_limit

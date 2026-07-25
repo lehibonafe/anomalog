@@ -6,7 +6,15 @@ what gets sent to any LLM provider for analysis — see the line-index contract
 in CLAUDE.md.
 """
 
+import logging
 import re
+
+import httpx
+
+from app.config import Settings
+from app.core.masking_http_client import get_masking_http_client
+
+logger = logging.getLogger(__name__)
 
 MASK = "***MASKED***"
 
@@ -59,3 +67,63 @@ def mask_message(text: str) -> str:
     text = _CARD_CANDIDATE_RE.sub(_mask_card_candidate, text)
     text = _PHONE_RE.sub(MASK, text)
     return text
+
+
+def _mask_chunk_external(
+    client: httpx.Client, chunk: list[str], settings: Settings
+) -> list[str] | None:
+    """One POST /api/mask/structured/ call for one sub-batch.
+
+    Returns the masked texts in order, or None on any failure (connection
+    error, timeout, 4xx, 5xx, or a malformed response body) — all treated as
+    "not available" and never raised, so the caller can fall back to local
+    masking.
+    """
+    keys = [str(i) for i in range(len(chunk))]
+    payload = {
+        "data": dict(zip(keys, chunk)),
+        "mask_fields": keys,
+        "mode": settings.masking_service_mode,
+    }
+    try:
+        resp = client.post("/api/mask/structured/", json=payload)
+        resp.raise_for_status()
+        masked_data = resp.json()["masked_data"]
+        return [masked_data[k] for k in keys]
+    except (httpx.HTTPError, KeyError, ValueError) as e:
+        logger.warning("Masking service unavailable, falling back to local masking: %s", e)
+        return None
+
+
+def mask_messages_batch(texts: list[str], settings: Settings) -> list[str]:
+    """Mask a page of log lines via the external service, sub-batched, with
+    local regex fallback per sub-batch on any failure.
+
+    Once one sub-batch fails, stops attempting the external service for the
+    rest of this call (fail-fast) so a fully-down service costs ~one timeout,
+    not one timeout per sub-batch. Already-succeeded sub-batches keep their
+    externally-masked text.
+    """
+    if not texts:
+        return []
+
+    if not settings.masking_service_api_key:
+        return [mask_message(t) for t in texts]
+
+    client = get_masking_http_client()
+    if client is None:
+        return [mask_message(t) for t in texts]
+
+    results: list[str] = []
+    external_available = True
+    batch_size = settings.masking_service_batch_size
+    for start in range(0, len(texts), batch_size):
+        chunk = texts[start : start + batch_size]
+        if external_available:
+            masked_chunk = _mask_chunk_external(client, chunk, settings)
+            if masked_chunk is not None:
+                results.extend(masked_chunk)
+                continue
+            external_available = False
+        results.extend(mask_message(t) for t in chunk)
+    return results

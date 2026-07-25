@@ -5,7 +5,7 @@ from app.core.aws_session import get_cloudtrail_client
 from app.core.errors import BadRequestError
 from app.schemas.cloudtrail import CloudTrailSearchResponse, LookupAttributeKey
 from app.schemas.common import LogEvent
-from app.services.masking import mask_message
+from app.services.masking import mask_messages_batch
 
 _PAGE_SIZE = 50
 
@@ -41,26 +41,36 @@ def lookup_events(
     if cursor:
         kwargs["NextToken"] = cursor
 
-    all_events: list[LogEvent] = []
+    raw_entries: list[tuple[str, datetime | None, str]] = []
     next_token: str | None = None
-    while len(all_events) < effective_limit:
+    while len(raw_entries) < effective_limit:
         resp = client.lookup_events(**kwargs)
         for e in resp.get("Events", []):
             event_time = e.get("EventTime")
-            all_events.append(
-                LogEvent(
-                    source="cloudtrail",
-                    origin="cloudtrail",
-                    stream_or_key=e.get("EventName", ""),
-                    timestamp=event_time.astimezone(timezone.utc) if event_time else None,
-                    message=mask_message(e.get("CloudTrailEvent", "")),
-                    line_index=0,
+            raw_entries.append(
+                (
+                    e.get("EventName", ""),
+                    event_time.astimezone(timezone.utc) if event_time else None,
+                    e.get("CloudTrailEvent", ""),
                 )
             )
         next_token = resp.get("NextToken")
         if not next_token:
             break
         kwargs["NextToken"] = next_token
+
+    masked_messages = mask_messages_batch([r[2] for r in raw_entries], settings)
+    all_events: list[LogEvent] = [
+        LogEvent(
+            source="cloudtrail",
+            origin="cloudtrail",
+            stream_or_key=event_name,
+            timestamp=timestamp,
+            message=masked,
+            line_index=0,
+        )
+        for (event_name, timestamp, _raw), masked in zip(raw_entries, masked_messages)
+    ]
 
     all_events.sort(key=lambda ev: ev.timestamp or datetime.min.replace(tzinfo=timezone.utc))
     truncated = len(all_events) > effective_limit
