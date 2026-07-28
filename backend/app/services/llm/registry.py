@@ -2,6 +2,7 @@ from app.core.errors import BadRequestError
 from app.services.llm.anthropic_provider import AnthropicProvider
 from app.services.llm.base import LLMProvider
 from app.services.llm.gemini_provider import GeminiProvider
+from app.services.llm.litellm_provider import LiteLLMProvider
 from app.services.llm.ollama_provider import OllamaProvider
 from app.services.llm.openai_provider import OpenAIProvider
 
@@ -10,6 +11,7 @@ PROVIDERS: dict[str, type[LLMProvider]] = {
     "openai": OpenAIProvider,
     "anthropic": AnthropicProvider,
     "ollama": OllamaProvider,
+    "litellm": LiteLLMProvider,
 }
 
 

@@ -32,7 +32,7 @@ class AnomalyService:
         events: list[LogEvent],
         context: AnalysisContext,
         *,
-        provider: str = "gemini",
+        provider: str = "litellm",
         api_key: str | None = None,
         model: str | None = None,
         base_url: str | None = None,

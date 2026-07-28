@@ -8,8 +8,13 @@ class Settings(BaseSettings):
     aws_profile: str | None = None
     aws_region: str = "ap-southeast-1"
 
-    # Gemini
-    gemini_api_key: str
+    # LiteLLM (default provider — team's internal proxy)
+    litellm_api_key: str
+    litellm_model: str = "qwen3:4b"
+    litellm_base_url: str = "http://llm.etapinc.com/v1"
+
+    # Gemini (opt-in; no longer the server-configured default)
+    gemini_api_key: str | None = None
     gemini_model: str = "gemini-2.5-flash"
     gemini_rpm_limit: int = 8
     gemini_max_chunks_per_analysis: int = 6

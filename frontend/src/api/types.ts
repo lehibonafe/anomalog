@@ -62,7 +62,7 @@ export interface CloudTrailSearchResponse {
   total_returned: number;
 }
 
-export type LlmProviderName = "gemini" | "openai" | "anthropic" | "ollama";
+export type LlmProviderName = "gemini" | "openai" | "anthropic" | "ollama" | "litellm";
 
 export interface AnalysisRequest {
   events: LogEvent[];

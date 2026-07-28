@@ -10,7 +10,7 @@ from app.services.llm.gemini_provider import GeminiProvider
 
 
 def make_settings(**overrides) -> Settings:
-    return Settings(gemini_api_key="test-key", **overrides)
+    return Settings(gemini_api_key="test-key", litellm_api_key="test-litellm-key", **overrides)
 
 
 def make_provider() -> GeminiProvider:

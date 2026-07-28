@@ -12,7 +12,7 @@ class AnalysisContext(BaseModel):
 class AnalysisRequest(BaseModel):
     events: list[LogEvent]
     context: AnalysisContext
-    provider: Literal["gemini", "openai", "anthropic", "ollama"] = "gemini"
+    provider: Literal["gemini", "openai", "anthropic", "ollama", "litellm"] = "litellm"
     api_key: str | None = None
     model: str | None = None
     base_url: str | None = None
@@ -20,7 +20,7 @@ class AnalysisRequest(BaseModel):
 
 
 class TestConnectionRequest(BaseModel):
-    provider: Literal["gemini", "openai", "anthropic", "ollama"] = "gemini"
+    provider: Literal["gemini", "openai", "anthropic", "ollama", "litellm"] = "litellm"
     api_key: str | None = None
     model: str | None = None
     base_url: str | None = None

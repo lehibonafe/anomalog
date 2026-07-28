@@ -14,6 +14,8 @@ def health():
 def config(settings: Settings = Depends(get_settings)):
     return {
         "aws_region": settings.aws_region,
+        "litellm_configured": bool(settings.litellm_api_key),
+        "litellm_model": settings.litellm_model,
         "gemini_configured": bool(settings.gemini_api_key),
         "gemini_model": settings.gemini_model,
         "max_log_search_lines": settings.max_log_search_lines,

@@ -12,6 +12,7 @@ const PROVIDER_MODEL_PLACEHOLDER: Record<LlmProvider, string> = {
   openai: "gpt-4o-mini",
   anthropic: "claude-haiku-4-5-20251001",
   ollama: "llama3.1",
+  litellm: "qwen3:4b",
 };
 
 export function AnomalyPanel() {
@@ -30,7 +31,7 @@ export function AnomalyPanel() {
 
   const quotaExceeded =
     analysis.isError && isAxiosError(analysis.error) && analysis.error.response?.status === 429;
-  const isCustom = llmProvider !== "gemini" || !!llmApiKey || !!llmModel || !!llmBaseUrl;
+  const isCustom = llmProvider !== "litellm" || !!llmApiKey || !!llmModel || !!llmBaseUrl;
 
   return (
     <div className="anomaly-panel">
@@ -49,6 +50,7 @@ export function AnomalyPanel() {
             <option value="openai">OpenAI</option>
             <option value="anthropic">Anthropic</option>
             <option value="ollama">Ollama (local)</option>
+            <option value="litellm">LiteLLM (proxy)</option>
           </select>
         </label>
 
@@ -56,7 +58,11 @@ export function AnomalyPanel() {
           {llmProvider === "ollama" ? "API key (usually not required)" : "API key"}
           <input
             type="password"
-            placeholder={llmProvider === "gemini" ? "Uses server default if blank" : "Required"}
+            placeholder={
+              llmProvider === "gemini" || llmProvider === "litellm"
+                ? "Uses server default if blank"
+                : "Required"
+            }
             value={llmApiKey}
             onChange={(e) => setLlmApiKey(e.target.value)}
             autoComplete="off"
@@ -85,6 +91,18 @@ export function AnomalyPanel() {
             {/* If the backend runs in Docker and Ollama runs on the host,
                 "localhost" inside the container won't reach the host — use
                 host.docker.internal instead. */}
+          </label>
+        )}
+
+        {llmProvider === "litellm" && (
+          <label className="model-settings-field">
+            Base URL
+            <input
+              type="text"
+              placeholder="http://llm.etapinc.com/v1 (default if blank)"
+              value={llmBaseUrl}
+              onChange={(e) => setLlmBaseUrl(e.target.value)}
+            />
           </label>
         )}
 

@@ -9,7 +9,7 @@ from app.services import cloudwatch_service
 
 
 def make_settings(**overrides) -> Settings:
-    return Settings(gemini_api_key="test-key", masking_service_api_key=None, **overrides)
+    return Settings(gemini_api_key="test-key", litellm_api_key="test-litellm-key", masking_service_api_key=None, **overrides)
 
 
 @patch("app.services.cloudwatch_service.get_logs_client")

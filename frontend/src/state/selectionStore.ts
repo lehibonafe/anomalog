@@ -3,7 +3,7 @@ import { create } from "zustand";
 import type { LogEvent } from "../api/types";
 
 export type SourceMode = "cloudwatch" | "cloudtrail";
-export type LlmProvider = "gemini" | "openai" | "anthropic" | "ollama";
+export type LlmProvider = "gemini" | "openai" | "anthropic" | "ollama" | "litellm";
 
 export interface HighlightedRange {
   start: number;
@@ -45,7 +45,7 @@ export const useSelectionStore = create<SelectionState>((set) => ({
   events: [],
   sourceDescription: "",
   highlightedRange: null,
-  llmProvider: "gemini",
+  llmProvider: "litellm",
   llmApiKey: "",
   llmModel: "",
   llmBaseUrl: "",

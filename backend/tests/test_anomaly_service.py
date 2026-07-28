@@ -8,6 +8,7 @@ from app.schemas.analysis import AnalysisContext, ChunkResult
 from app.schemas.common import LogEvent
 from app.services.anomaly_service import AnomalyService
 from app.services.llm.gemini_provider import GeminiProvider
+from app.services.llm.litellm_provider import LiteLLMProvider
 from app.services.llm.openai_provider import OpenAIProvider
 
 
@@ -23,7 +24,7 @@ def make_event(i: int, message: str) -> LogEvent:
 
 
 def make_settings(**overrides) -> Settings:
-    return Settings(gemini_api_key="test-key", gemini_rpm_limit=6000, **overrides)
+    return Settings(gemini_api_key="test-key", litellm_api_key="test-litellm-key", gemini_rpm_limit=6000, **overrides)
 
 
 async def test_analyze_returns_findings_from_single_chunk(monkeypatch):
@@ -36,7 +37,9 @@ async def test_analyze_returns_findings_from_single_chunk(monkeypatch):
     monkeypatch.setattr(GeminiProvider, "call_chunk", fake_call_chunk)
 
     events = [make_event(0, "ERROR boom")]
-    result = await service.analyze(events, AnalysisContext(source_description="test"))
+    result = await service.analyze(
+        events, AnalysisContext(source_description="test"), provider="gemini"
+    )
 
     assert result.chunks_analyzed == 1
     assert result.analysis == "[0] something broke: ERROR boom"
@@ -44,7 +47,7 @@ async def test_analyze_returns_findings_from_single_chunk(monkeypatch):
     assert result.model == settings.gemini_model
 
 
-async def test_analyze_defaults_to_gemini_provider(monkeypatch):
+async def test_analyze_defaults_to_litellm_provider(monkeypatch):
     settings = make_settings(chunk_size_lines=10, gemini_max_chunks_per_analysis=5)
     service = AnomalyService(settings)
 
@@ -54,13 +57,13 @@ async def test_analyze_defaults_to_gemini_provider(monkeypatch):
         called["count"] += 1
         return ChunkResult(analysis="")
 
-    monkeypatch.setattr(GeminiProvider, "call_chunk", fake_call_chunk)
+    monkeypatch.setattr(LiteLLMProvider, "call_chunk", fake_call_chunk)
 
     events = [make_event(0, "ERROR boom")]
     result = await service.analyze(events, AnalysisContext(source_description="test"))
 
     assert called["count"] == 1
-    assert result.model == settings.gemini_model
+    assert result.model == settings.litellm_model
 
 
 async def test_analyze_unknown_provider_raises_bad_request():
@@ -91,6 +94,7 @@ async def test_analyze_with_user_prompt_reaches_llm_and_skips_prefilter(monkeypa
     result = await service.analyze(
         events,
         AnalysisContext(source_description="test"),
+        provider="gemini",
         user_prompt="count successful logins",
     )
 

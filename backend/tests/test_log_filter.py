@@ -17,7 +17,7 @@ def make_event(i: int, message: str) -> LogEvent:
 
 
 def make_settings(**overrides) -> Settings:
-    return Settings(gemini_api_key="test-key", **overrides)
+    return Settings(gemini_api_key="test-key", litellm_api_key="test-litellm-key", **overrides)
 
 
 def test_select_relevant_keeps_matches_and_context():

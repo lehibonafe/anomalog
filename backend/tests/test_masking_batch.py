@@ -9,7 +9,7 @@ from app.services.masking import mask_message, mask_messages_batch
 
 def make_settings(**overrides) -> Settings:
     overrides.setdefault("masking_service_api_key", "test-masking-key")
-    return Settings(gemini_api_key="test-key", **overrides)
+    return Settings(gemini_api_key="test-key", litellm_api_key="test-litellm-key", **overrides)
 
 
 @patch("app.services.masking.get_masking_http_client")

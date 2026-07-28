@@ -11,7 +11,7 @@ from app.services.llm.ollama_provider import DEFAULT_BASE_URL, OllamaProvider
 
 
 def make_settings(**overrides) -> Settings:
-    return Settings(gemini_api_key="test-key", **overrides)
+    return Settings(gemini_api_key="test-key", litellm_api_key="test-litellm-key", **overrides)
 
 
 def make_provider(api_key: str | None = None, base_url: str | None = None) -> OllamaProvider:

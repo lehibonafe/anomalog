@@ -11,7 +11,7 @@ from app.services.llm.openai_provider import OpenAIProvider
 
 
 def make_settings(**overrides) -> Settings:
-    return Settings(gemini_api_key="test-key", **overrides)
+    return Settings(gemini_api_key="test-key", litellm_api_key="test-litellm-key", **overrides)
 
 
 def make_provider(api_key: str | None = "test-openai-key") -> OpenAIProvider:
