@@ -6,6 +6,18 @@ if TYPE_CHECKING:
     from app.config import Settings
     from app.schemas.analysis import ChunkResult
 
+# Applied to every provider's SDK client (timeout=) so an unreachable/slow
+# upstream (e.g. a black-holed internal proxy) fails call_chunk within a
+# bounded time instead of hanging on the SDK's own default (600s, or
+# indefinitely if the TCP connection never resolves) — matters most for
+# test_connection, which is meant to be a fast diagnostic. Each client is
+# also constructed with max_retries=0: the SDKs retry timeouts/connection
+# errors internally by default (on top of this timeout), which would silently
+# multiply the wait (timeout * (1 + max_retries)); AnomalyService._call_chunk
+# already owns retry policy at the app level, so the SDK's own retries would
+# just be redundant, invisible extra latency.
+DEFAULT_LLM_TIMEOUT_S = 180.0
+
 
 class LLMRateLimited(Exception):
     """Internal signal that a provider call hit an upstream rate limit.

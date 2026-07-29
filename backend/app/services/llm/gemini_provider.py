@@ -4,7 +4,7 @@ from google.genai import types
 from app.config import Settings
 from app.core.errors import LLMRequestError
 from app.schemas.analysis import ChunkResult
-from app.services.llm.base import LLMProvider, LLMRateLimited, ProviderDefaults
+from app.services.llm.base import DEFAULT_LLM_TIMEOUT_S, LLMProvider, LLMRateLimited, ProviderDefaults
 
 
 class GeminiProvider(LLMProvider):
@@ -27,7 +27,10 @@ class GeminiProvider(LLMProvider):
         base_url: str | None,
         settings: Settings,
     ) -> None:
-        self.client = genai.Client(api_key=api_key or settings.gemini_api_key)
+        self.client = genai.Client(
+            api_key=api_key or settings.gemini_api_key,
+            http_options=types.HttpOptions(timeout=int(DEFAULT_LLM_TIMEOUT_S * 1000)),
+        )
         self.model = model
 
     async def call_chunk(self, prompt: str) -> ChunkResult:

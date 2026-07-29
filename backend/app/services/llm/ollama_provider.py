@@ -1,7 +1,7 @@
 from openai import AsyncOpenAI
 
 from app.config import Settings
-from app.services.llm.base import ProviderDefaults
+from app.services.llm.base import DEFAULT_LLM_TIMEOUT_S, ProviderDefaults
 from app.services.llm.openai_provider import OpenAIProvider
 
 DEFAULT_MODEL = "llama3.1"
@@ -37,5 +37,10 @@ class OllamaProvider(OpenAIProvider):
         settings: Settings,
     ) -> None:
         # api_key is required by the SDK constructor but ignored by Ollama.
-        self.client = AsyncOpenAI(api_key=api_key or "ollama", base_url=base_url or DEFAULT_BASE_URL)
+        self.client = AsyncOpenAI(
+            api_key=api_key or "ollama",
+            base_url=base_url or DEFAULT_BASE_URL,
+            timeout=DEFAULT_LLM_TIMEOUT_S,
+            max_retries=0,
+        )
         self.model = model

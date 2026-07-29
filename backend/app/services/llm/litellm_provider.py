@@ -1,7 +1,7 @@
 from openai import AsyncOpenAI
 
 from app.config import Settings
-from app.services.llm.base import ProviderDefaults
+from app.services.llm.base import DEFAULT_LLM_TIMEOUT_S, ProviderDefaults
 from app.services.llm.openai_provider import OpenAIProvider
 
 DEFAULT_RPM = 60
@@ -39,5 +39,7 @@ class LiteLLMProvider(OpenAIProvider):
         self.client = AsyncOpenAI(
             api_key=api_key or settings.litellm_api_key,
             base_url=base_url or settings.litellm_base_url,
+            timeout=DEFAULT_LLM_TIMEOUT_S,
+            max_retries=0,
         )
         self.model = model

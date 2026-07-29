@@ -4,7 +4,7 @@ from openai import AsyncOpenAI
 from app.config import Settings
 from app.core.errors import BadRequestError, LLMRequestError
 from app.schemas.analysis import ChunkResult
-from app.services.llm.base import LLMProvider, LLMRateLimited, ProviderDefaults
+from app.services.llm.base import DEFAULT_LLM_TIMEOUT_S, LLMProvider, LLMRateLimited, ProviderDefaults
 
 DEFAULT_MODEL = "gpt-4o-mini"
 DEFAULT_RPM = 60
@@ -32,7 +32,9 @@ class OpenAIProvider(LLMProvider):
             raise BadRequestError(
                 "OpenAI provider requires an api_key (set it in Model settings)."
             )
-        self.client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        self.client = AsyncOpenAI(
+            api_key=api_key, base_url=base_url, timeout=DEFAULT_LLM_TIMEOUT_S, max_retries=0
+        )
         self.model = model
 
     async def call_chunk(self, prompt: str) -> ChunkResult:

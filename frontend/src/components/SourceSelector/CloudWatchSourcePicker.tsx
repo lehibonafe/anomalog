@@ -1,10 +1,7 @@
-import { isAxiosError } from "axios";
 import { useState } from "react";
 
-import { useCloudWatchSearch } from "../../hooks/useCloudWatchSearch";
 import { useLogGroups } from "../../hooks/useLogGroups";
 import { useSelectionStore } from "../../state/selectionStore";
-import { exceedsMaxTimeRange } from "../../utils/time";
 
 export function CloudWatchSourcePicker() {
   const [prefix, setPrefix] = useState("");
@@ -12,11 +9,6 @@ export function CloudWatchSourcePicker() {
 
   const logGroupNames = useSelectionStore((s) => s.logGroupNames);
   const setLogGroupNames = useSelectionStore((s) => s.setLogGroupNames);
-  const startTime = useSelectionStore((s) => s.startTime);
-  const endTime = useSelectionStore((s) => s.endTime);
-  const filterPattern = useSelectionStore((s) => s.filterPattern);
-
-  const search = useCloudWatchSearch();
 
   const toggleGroup = (name: string) => {
     setLogGroupNames(
@@ -25,9 +17,6 @@ export function CloudWatchSourcePicker() {
         : [...logGroupNames, name]
     );
   };
-
-  const rangeTooLong = exceedsMaxTimeRange(startTime, endTime);
-  const canSearch = logGroupNames.length > 0 && !!startTime && !!endTime && !rangeTooLong;
 
   return (
     <div className="panel-section">
@@ -57,29 +46,6 @@ export function CloudWatchSourcePicker() {
           <li className="hint">No log groups found.</li>
         )}
       </ul>
-      <button
-        type="button"
-        className="btn-primary btn-block"
-        disabled={!canSearch || search.isPending}
-        onClick={() =>
-          search.mutate({
-            log_group_names: logGroupNames,
-            start_time: startTime,
-            end_time: endTime,
-            filter_pattern: filterPattern || null,
-          })
-        }
-      >
-        {search.isPending && <span className="spinner" />}
-        {search.isPending ? "Searching..." : "Search logs"}
-      </button>
-      {search.isError && (
-        <p className="error-text">
-          {isAxiosError(search.error) && search.error.response?.status === 400
-            ? search.error.response?.data?.detail
-            : "Search failed. Check the backend logs."}
-        </p>
-      )}
     </div>
   );
 }

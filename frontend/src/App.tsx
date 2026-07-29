@@ -18,8 +18,8 @@ function App() {
       </header>
       <div className="app-body">
         <aside className="sidebar">
-          <SourceSelector />
           <TimeRangePicker />
+          <SourceSelector />
           <FilterBar />
         </aside>
         <main className="main-content">
