@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import type { LogEvent } from "../api/types";
+import type { CloudTrailLookupAttributeKey, LogEvent } from "../api/types";
 
 export type SourceMode = "cloudwatch" | "cloudtrail";
 export type LlmProvider = "gemini" | "openai" | "anthropic" | "ollama" | "litellm";
@@ -16,6 +16,8 @@ interface SelectionState {
   startTime: string;
   endTime: string;
   filterPattern: string;
+  cloudTrailAttributeKey: CloudTrailLookupAttributeKey | "";
+  cloudTrailAttributeValue: string;
   events: LogEvent[];
   sourceDescription: string;
   highlightedRange: HighlightedRange | null;
@@ -28,6 +30,8 @@ interface SelectionState {
   setLogGroupNames: (names: string[]) => void;
   setTimeRange: (start: string, end: string) => void;
   setFilterPattern: (pattern: string) => void;
+  setCloudTrailAttributeKey: (key: CloudTrailLookupAttributeKey | "") => void;
+  setCloudTrailAttributeValue: (value: string) => void;
   setEvents: (events: LogEvent[], sourceDescription: string) => void;
   setHighlightedRange: (range: HighlightedRange | null) => void;
   setLlmProvider: (provider: LlmProvider) => void;
@@ -42,6 +46,8 @@ export const useSelectionStore = create<SelectionState>((set) => ({
   startTime: "",
   endTime: "",
   filterPattern: "",
+  cloudTrailAttributeKey: "",
+  cloudTrailAttributeValue: "",
   events: [],
   sourceDescription: "",
   highlightedRange: null,
@@ -54,6 +60,8 @@ export const useSelectionStore = create<SelectionState>((set) => ({
   setLogGroupNames: (names) => set({ logGroupNames: names }),
   setTimeRange: (start, end) => set({ startTime: start, endTime: end }),
   setFilterPattern: (pattern) => set({ filterPattern: pattern }),
+  setCloudTrailAttributeKey: (key) => set({ cloudTrailAttributeKey: key }),
+  setCloudTrailAttributeValue: (value) => set({ cloudTrailAttributeValue: value }),
   setEvents: (events, sourceDescription) =>
     set({ events, sourceDescription, highlightedRange: null }),
   setHighlightedRange: (range) => set({ highlightedRange: range }),

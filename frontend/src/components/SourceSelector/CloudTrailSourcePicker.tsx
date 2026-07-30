@@ -1,10 +1,5 @@
-import { isAxiosError } from "axios";
-import { useState } from "react";
-
 import type { CloudTrailLookupAttributeKey } from "../../api/types";
-import { useCloudTrailSearch } from "../../hooks/useCloudTrailSearch";
 import { useSelectionStore } from "../../state/selectionStore";
-import { exceedsMaxTimeRange } from "../../utils/time";
 
 const LOOKUP_ATTRIBUTE_KEYS: CloudTrailLookupAttributeKey[] = [
   "EventName",
@@ -18,17 +13,10 @@ const LOOKUP_ATTRIBUTE_KEYS: CloudTrailLookupAttributeKey[] = [
 ];
 
 export function CloudTrailSourcePicker() {
-  const [attributeKey, setAttributeKey] = useState<CloudTrailLookupAttributeKey | "">("");
-  const [attributeValue, setAttributeValue] = useState("");
-
-  const startTime = useSelectionStore((s) => s.startTime);
-  const endTime = useSelectionStore((s) => s.endTime);
-
-  const search = useCloudTrailSearch();
-
-  const rangeTooLong = exceedsMaxTimeRange(startTime, endTime);
-  const hasIncompleteAttribute = !!attributeKey !== !!attributeValue.trim();
-  const canSearch = !!startTime && !!endTime && !rangeTooLong && !hasIncompleteAttribute;
+  const attributeKey = useSelectionStore((s) => s.cloudTrailAttributeKey);
+  const setAttributeKey = useSelectionStore((s) => s.setCloudTrailAttributeKey);
+  const attributeValue = useSelectionStore((s) => s.cloudTrailAttributeValue);
+  const setAttributeValue = useSelectionStore((s) => s.setCloudTrailAttributeValue);
 
   return (
     <div className="panel-section">
@@ -63,29 +51,6 @@ export function CloudTrailSourcePicker() {
           />
         </label>
       </div>
-      <button
-        type="button"
-        className="btn-primary btn-block"
-        disabled={!canSearch || search.isPending}
-        onClick={() =>
-          search.mutate({
-            start_time: startTime,
-            end_time: endTime,
-            lookup_attribute_key: attributeKey || null,
-            lookup_attribute_value: attributeValue.trim() || null,
-          })
-        }
-      >
-        {search.isPending && <span className="spinner" />}
-        {search.isPending ? "Searching..." : "Search events"}
-      </button>
-      {search.isError && (
-        <p className="error-text">
-          {isAxiosError(search.error) && search.error.response?.status === 400
-            ? search.error.response?.data?.detail
-            : "Search failed. Check the backend logs."}
-        </p>
-      )}
     </div>
   );
 }

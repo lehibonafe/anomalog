@@ -1,4 +1,5 @@
 import { AnomalyPanel } from './components/AnomalyPanel/AnomalyPanel'
+import { CloudTrailSearchBar } from './components/FilterBar/CloudTrailSearchBar'
 import { FilterBar } from './components/FilterBar/FilterBar'
 import { LogViewer } from './components/LogViewer/LogViewer'
 import { SourceSelector } from './components/SourceSelector/SourceSelector'
@@ -18,9 +19,10 @@ function App() {
       </header>
       <div className="app-body">
         <aside className="sidebar">
-          <TimeRangePicker />
           <SourceSelector />
+          <TimeRangePicker />
           <FilterBar />
+          <CloudTrailSearchBar />
         </aside>
         <main className="main-content">
           <div className="log-viewer-header">
