@@ -24,7 +24,7 @@ async def test_call_chunk_returns_text_response():
     fake_response.text = "line [0] looks fine."
     provider.client.aio.models.generate_content = AsyncMock(return_value=fake_response)
 
-    result = await provider.call_chunk("prompt")
+    result = await provider.call_chunk("system prompt", "prompt")
 
     assert result.analysis == "line [0] looks fine."
 
@@ -35,7 +35,7 @@ async def test_call_chunk_raises_rate_limited_on_429():
     provider.client.aio.models.generate_content = AsyncMock(side_effect=error)
 
     with pytest.raises(LLMRateLimited):
-        await provider.call_chunk("prompt")
+        await provider.call_chunk("system prompt", "prompt")
 
 
 async def test_call_chunk_raises_request_error_on_other_failure():
@@ -43,4 +43,4 @@ async def test_call_chunk_raises_request_error_on_other_failure():
     provider.client.aio.models.generate_content = AsyncMock(side_effect=RuntimeError("boom"))
 
     with pytest.raises(LLMRequestError):
-        await provider.call_chunk("prompt")
+        await provider.call_chunk("system prompt", "prompt")

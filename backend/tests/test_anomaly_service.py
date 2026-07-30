@@ -31,7 +31,7 @@ async def test_analyze_returns_findings_from_single_chunk(monkeypatch):
     settings = make_settings(chunk_size_lines=10, gemini_max_chunks_per_analysis=5)
     service = AnomalyService(settings)
 
-    async def fake_call_chunk(self, prompt):
+    async def fake_call_chunk(self, system, prompt):
         return ChunkResult(analysis="[0] something broke: ERROR boom")
 
     monkeypatch.setattr(GeminiProvider, "call_chunk", fake_call_chunk)
@@ -53,7 +53,7 @@ async def test_analyze_defaults_to_litellm_provider(monkeypatch):
 
     called = {"count": 0}
 
-    async def fake_call_chunk(self, prompt):
+    async def fake_call_chunk(self, system, prompt):
         called["count"] += 1
         return ChunkResult(analysis="")
 
@@ -83,7 +83,7 @@ async def test_analyze_with_user_prompt_reaches_llm_and_skips_prefilter(monkeypa
 
     seen_prompts: list[str] = []
 
-    async def fake_call_chunk(self, prompt):
+    async def fake_call_chunk(self, system, prompt):
         seen_prompts.append(prompt)
         return ChunkResult(analysis="")
 
@@ -109,7 +109,7 @@ async def test_analyze_includes_conversation_history_in_prompt(monkeypatch):
 
     seen_prompts: list[str] = []
 
-    async def fake_call_chunk(self, prompt):
+    async def fake_call_chunk(self, system, prompt):
         seen_prompts.append(prompt)
         return ChunkResult(analysis="")
 
@@ -190,7 +190,7 @@ async def test_connection_reports_success(monkeypatch):
     settings = make_settings()
     service = AnomalyService(settings)
 
-    async def fake_call_chunk(self, prompt):
+    async def fake_call_chunk(self, system, prompt):
         return ChunkResult(analysis="")
 
     monkeypatch.setattr(GeminiProvider, "call_chunk", fake_call_chunk)
@@ -205,7 +205,7 @@ async def test_connection_reports_failure_from_provider_call(monkeypatch):
     settings = make_settings()
     service = AnomalyService(settings)
 
-    async def fake_call_chunk(self, prompt):
+    async def fake_call_chunk(self, system, prompt):
         raise LLMRequestError("upstream said no")
 
     monkeypatch.setattr(GeminiProvider, "call_chunk", fake_call_chunk)
@@ -230,7 +230,7 @@ async def test_connection_does_not_raise_for_unreachable_base_url(monkeypatch):
     settings = make_settings()
     service = AnomalyService(settings)
 
-    async def fake_call_chunk(self, prompt):
+    async def fake_call_chunk(self, system, prompt):
         raise LLMRequestError("Connection refused")
 
     monkeypatch.setattr(OpenAIProvider, "call_chunk", fake_call_chunk)

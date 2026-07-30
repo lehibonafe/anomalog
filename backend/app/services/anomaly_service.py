@@ -14,7 +14,7 @@ from app.schemas.analysis import (
 from app.schemas.common import LogEvent
 from app.services import log_filter
 from app.services.llm.base import LLMProvider, LLMRateLimited, ProviderDefaults
-from app.services.llm.prompt import build_prompt
+from app.services.llm.prompt import SYSTEM_PROMPT, build_prompt
 from app.services.llm.registry import PROVIDERS, get_provider_class
 from app.services.masking import mask_message
 
@@ -156,7 +156,7 @@ class AnomalyService:
             user_prompt="Reply with a brief confirmation that the connection works.",
         )
         try:
-            await instance.call_chunk(prompt)
+            await instance.call_chunk(SYSTEM_PROMPT, prompt)
         except LLMRateLimited as e:
             return TestConnectionResponse(
                 success=False, message=f"Rate limited: {e}", model=effective_model
@@ -182,7 +182,7 @@ class AnomalyService:
         prompt = build_prompt(chunk_events, context, user_prompt, history)
         for attempt in range(max_retries + 1):
             try:
-                return await provider.call_chunk(prompt)
+                return await provider.call_chunk(SYSTEM_PROMPT, prompt)
             except LLMRateLimited as e:
                 if attempt < max_retries:
                     await asyncio.sleep(2**attempt * 5)

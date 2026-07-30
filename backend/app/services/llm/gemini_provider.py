@@ -33,12 +33,12 @@ class GeminiProvider(LLMProvider):
         )
         self.model = model
 
-    async def call_chunk(self, prompt: str) -> ChunkResult:
+    async def call_chunk(self, system: str, prompt: str) -> ChunkResult:
         try:
             resp = await self.client.aio.models.generate_content(
                 model=self.model,
                 contents=prompt,
-                config=types.GenerateContentConfig(temperature=0.1),
+                config=types.GenerateContentConfig(temperature=0.1, system_instruction=system),
             )
             return ChunkResult(analysis=resp.text)
         except genai.errors.ClientError as e:

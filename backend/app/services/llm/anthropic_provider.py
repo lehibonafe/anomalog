@@ -36,11 +36,12 @@ class AnthropicProvider(LLMProvider):
         )
         self.model = model
 
-    async def call_chunk(self, prompt: str) -> ChunkResult:
+    async def call_chunk(self, system: str, prompt: str) -> ChunkResult:
         try:
             response = await self.client.messages.create(
                 model=self.model,
                 max_tokens=4096,
+                system=system,
                 messages=[{"role": "user", "content": prompt}],
             )
         except anthropic.RateLimitError as e:

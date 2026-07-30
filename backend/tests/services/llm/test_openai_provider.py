@@ -39,7 +39,7 @@ async def test_call_chunk_returns_text_result():
     fake_completion.choices = [MagicMock(message=fake_message)]
     provider.client.chat.completions.create = AsyncMock(return_value=fake_completion)
 
-    result = await provider.call_chunk("prompt")
+    result = await provider.call_chunk("system prompt", "prompt")
 
     assert result.analysis == "line [0] looks fine."
 
@@ -54,7 +54,7 @@ async def test_call_chunk_raises_request_error_on_refusal():
     provider.client.chat.completions.create = AsyncMock(return_value=fake_completion)
 
     with pytest.raises(LLMRequestError):
-        await provider.call_chunk("prompt")
+        await provider.call_chunk("system prompt", "prompt")
 
 
 async def test_call_chunk_raises_rate_limited_on_429():
@@ -62,4 +62,4 @@ async def test_call_chunk_raises_rate_limited_on_429():
     provider.client.chat.completions.create = AsyncMock(side_effect=make_rate_limit_error())
 
     with pytest.raises(LLMRateLimited):
-        await provider.call_chunk("prompt")
+        await provider.call_chunk("system prompt", "prompt")

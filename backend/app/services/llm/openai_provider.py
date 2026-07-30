@@ -37,11 +37,14 @@ class OpenAIProvider(LLMProvider):
         )
         self.model = model
 
-    async def call_chunk(self, prompt: str) -> ChunkResult:
+    async def call_chunk(self, system: str, prompt: str) -> ChunkResult:
         try:
             completion = await self.client.chat.completions.create(
                 model=self.model,
-                messages=[{"role": "user", "content": prompt}],
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt},
+                ],
                 temperature=0.1,
             )
         except openai.RateLimitError as e:
