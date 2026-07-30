@@ -64,6 +64,11 @@ export interface CloudTrailSearchResponse {
 
 export type LlmProviderName = "gemini" | "openai" | "anthropic" | "ollama" | "litellm";
 
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface AnalysisRequest {
   events: LogEvent[];
   context: { source_description: string };
@@ -72,6 +77,7 @@ export interface AnalysisRequest {
   model?: string | null;
   base_url?: string | null;
   user_prompt?: string | null;
+  history?: ChatMessage[];
 }
 
 export interface TestConnectionRequest {

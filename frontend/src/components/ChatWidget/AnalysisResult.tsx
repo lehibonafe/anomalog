@@ -4,7 +4,7 @@ import { useSelectionStore } from "../../state/selectionStore";
 
 const LINE_REF = /\[(\d+)(?:-(\d+))?\]/g;
 
-export function AnalysisResult({ text }: { text: string }) {
+export function AnalysisResult({ text, className }: { text: string; className?: string }) {
   const setHighlightedRange = useSelectionStore((s) => s.setHighlightedRange);
 
   const parts: React.ReactNode[] = [];
@@ -35,5 +35,5 @@ export function AnalysisResult({ text }: { text: string }) {
     parts.push(<Fragment key={key++}>{text.slice(lastIndex)}</Fragment>);
   }
 
-  return <div className="analysis-result">{parts}</div>;
+  return <div className={className ?? "analysis-result"}>{parts}</div>;
 }

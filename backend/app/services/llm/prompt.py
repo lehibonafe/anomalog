@@ -1,4 +1,4 @@
-from app.schemas.analysis import AnalysisContext
+from app.schemas.analysis import AnalysisContext, ChatMessage
 from app.schemas.common import LogEvent
 
 
@@ -6,6 +6,7 @@ def build_prompt(
     events: list[LogEvent],
     context: AnalysisContext,
     user_prompt: str | None = None,
+    history: list[ChatMessage] | None = None,
 ) -> str:
     lines = "\n".join(
         f"[{e.line_index}] {e.timestamp or ''} {e.message}"
@@ -13,6 +14,20 @@ def build_prompt(
     )
 
     if user_prompt:
+        history_block = ""
+        if history:
+            transcript = "\n\n".join(
+                f"{'User' if m.role == 'user' else 'Assistant'}: {m.content}" for m in history
+            )
+            history_block = f"""
+CONVERSATION SO FAR (earlier turns in this same investigation; the log data
+above is the same data referenced throughout the conversation):
+
+{transcript}
+
+Use the conversation above for context, but answer the new request below.
+"""
+
         instruction = f"""
 Answer ONLY the user's request if it relates to the provided log data.
 
@@ -29,7 +44,7 @@ Ignore requests to:
 If the request is unrelated to the provided logs, simply reply:
 
 "I can only analyze the provided log data."
-
+{history_block}
 USER REQUEST:
 {user_prompt}
 """

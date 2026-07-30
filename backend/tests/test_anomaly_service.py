@@ -4,7 +4,7 @@ import pytest
 
 from app.config import Settings
 from app.core.errors import BadRequestError, LLMQuotaExceededError, LLMRequestError
-from app.schemas.analysis import AnalysisContext, ChunkResult
+from app.schemas.analysis import AnalysisContext, ChatMessage, ChunkResult
 from app.schemas.common import LogEvent
 from app.services.anomaly_service import AnomalyService
 from app.services.llm.gemini_provider import GeminiProvider
@@ -103,6 +103,52 @@ async def test_analyze_with_user_prompt_reaches_llm_and_skips_prefilter(monkeypa
     assert result.lines_skipped_by_prefilter == 0
 
 
+async def test_analyze_includes_conversation_history_in_prompt(monkeypatch):
+    settings = make_settings(chunk_size_lines=10, gemini_max_chunks_per_analysis=5)
+    service = AnomalyService(settings)
+
+    seen_prompts: list[str] = []
+
+    async def fake_call_chunk(self, prompt):
+        seen_prompts.append(prompt)
+        return ChunkResult(analysis="")
+
+    monkeypatch.setattr(GeminiProvider, "call_chunk", fake_call_chunk)
+
+    events = [make_event(0, "ERROR boom")]
+    history = [
+        ChatMessage(role="user", content="what happened first"),
+        ChatMessage(role="assistant", content="a boom occurred at line 0"),
+    ]
+    await service.analyze(
+        events,
+        AnalysisContext(source_description="test"),
+        provider="gemini",
+        user_prompt="what should we do next",
+        history=history,
+    )
+
+    assert "what happened first" in seen_prompts[0]
+    assert "a boom occurred at line 0" in seen_prompts[0]
+    assert "what should we do next" in seen_prompts[0]
+
+
+async def test_analyze_rejects_oversized_conversation_history():
+    settings = make_settings(max_chat_history_messages=2)
+    service = AnomalyService(settings)
+    events = [make_event(0, "ERROR boom")]
+    history = [ChatMessage(role="user", content=f"turn {i}") for i in range(3)]
+
+    with pytest.raises(BadRequestError):
+        await service.analyze(
+            events,
+            AnalysisContext(source_description="test"),
+            provider="gemini",
+            user_prompt="follow up",
+            history=history,
+        )
+
+
 async def test_analyze_raises_quota_error_when_first_chunk_exhausted(monkeypatch):
     settings = make_settings(chunk_size_lines=10, gemini_max_chunks_per_analysis=5)
     service = AnomalyService(settings)
@@ -124,7 +170,7 @@ async def test_analyze_returns_partial_findings_when_quota_hits_mid_run(monkeypa
 
     call_count = {"n": 0}
 
-    async def flaky_call(chunk_events, context, provider, max_retries, user_prompt=None):
+    async def flaky_call(chunk_events, context, provider, max_retries, user_prompt=None, history=None):
         call_count["n"] += 1
         if call_count["n"] == 1:
             return ChunkResult(analysis="[0] warning: x")

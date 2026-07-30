@@ -1,8 +1,13 @@
 import { useMutation } from "@tanstack/react-query";
 
 import { runAnomalyAnalysis } from "../api/analysis";
-import type { AnalysisResponse } from "../api/types";
+import type { AnalysisResponse, ChatMessage } from "../api/types";
 import { useSelectionStore } from "../state/selectionStore";
+
+export interface AnomalyAnalysisVars {
+  userPrompt: string;
+  history?: ChatMessage[];
+}
 
 export function useAnomalyAnalysis() {
   const events = useSelectionStore((s) => s.events);
@@ -12,8 +17,8 @@ export function useAnomalyAnalysis() {
   const llmModel = useSelectionStore((s) => s.llmModel);
   const llmBaseUrl = useSelectionStore((s) => s.llmBaseUrl);
 
-  return useMutation<AnalysisResponse, Error, string>({
-    mutationFn: (userPrompt) =>
+  return useMutation<AnalysisResponse, Error, AnomalyAnalysisVars>({
+    mutationFn: ({ userPrompt, history }) =>
       runAnomalyAnalysis({
         events,
         context: { source_description: sourceDescription || "Selected log slice" },
@@ -22,6 +27,7 @@ export function useAnomalyAnalysis() {
         model: llmModel.trim() || null,
         base_url: llmBaseUrl.trim() || null,
         user_prompt: userPrompt.trim() || null,
+        history: history ?? [],
       }),
   });
 }

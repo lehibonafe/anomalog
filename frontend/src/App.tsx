@@ -1,4 +1,4 @@
-import { AnomalyPanel } from './components/AnomalyPanel/AnomalyPanel'
+import { ChatWidget } from './components/ChatWidget/ChatWidget'
 import { CloudTrailSearchBar } from './components/FilterBar/CloudTrailSearchBar'
 import { FilterBar } from './components/FilterBar/FilterBar'
 import { LogViewer } from './components/LogViewer/LogViewer'
@@ -31,10 +31,8 @@ function App() {
           </div>
           <LogViewer />
         </main>
-        <aside className="anomaly-sidebar">
-          <AnomalyPanel />
-        </aside>
       </div>
+      <ChatWidget />
     </div>
   )
 }

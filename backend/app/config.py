@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     # Log volume caps
     max_time_range_days: int = 7
     max_log_search_lines: int = 5000
+    max_chat_history_messages: int = 40
     max_analysis_lines: int = 1500
     max_analysis_chars: int = 500_000
     max_line_length: int = 2000

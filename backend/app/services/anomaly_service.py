@@ -7,6 +7,7 @@ from app.core.rate_limiter import RateLimiter
 from app.schemas.analysis import (
     AnalysisContext,
     AnalysisResponse,
+    ChatMessage,
     ChunkResult,
     TestConnectionResponse,
 )
@@ -38,11 +39,18 @@ class AnomalyService:
         model: str | None = None,
         base_url: str | None = None,
         user_prompt: str | None = None,
+        history: list[ChatMessage] | None = None,
     ) -> AnalysisResponse:
         if len(events) > self.settings.max_log_search_lines:
             raise BadRequestError(
                 f"Too many events in one analysis request ({len(events)}); "
                 f"max is {self.settings.max_log_search_lines}."
+            )
+        history = history or []
+        if len(history) > self.settings.max_chat_history_messages:
+            raise BadRequestError(
+                f"Too many messages in conversation history ({len(history)}); "
+                f"max is {self.settings.max_chat_history_messages}."
             )
 
         # Defense in depth: masking.py is applied when events are first fetched
@@ -80,7 +88,7 @@ class AnomalyService:
             await limiter.wait()
             try:
                 result = await self._call_chunk(
-                    chunk_events, context, instance, defaults.max_retries, user_prompt
+                    chunk_events, context, instance, defaults.max_retries, user_prompt, history
                 )
                 analyses.append(result.analysis)
                 analyzed += 1
@@ -169,8 +177,9 @@ class AnomalyService:
         provider: LLMProvider,
         max_retries: int,
         user_prompt: str | None = None,
+        history: list[ChatMessage] | None = None,
     ) -> ChunkResult:
-        prompt = build_prompt(chunk_events, context, user_prompt)
+        prompt = build_prompt(chunk_events, context, user_prompt, history)
         for attempt in range(max_retries + 1):
             try:
                 return await provider.call_chunk(prompt)

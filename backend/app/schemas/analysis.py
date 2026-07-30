@@ -9,6 +9,11 @@ class AnalysisContext(BaseModel):
     source_description: str
 
 
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
 class AnalysisRequest(BaseModel):
     events: list[LogEvent]
     context: AnalysisContext
@@ -17,6 +22,7 @@ class AnalysisRequest(BaseModel):
     model: str | None = None
     base_url: str | None = None
     user_prompt: str | None = None
+    history: list[ChatMessage] = []
 
 
 class TestConnectionRequest(BaseModel):
