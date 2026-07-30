@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 
 from app.config import Settings, get_settings
+from app.services.masking import mask_message
 
 router = APIRouter(prefix="/api", tags=["meta"])
 
@@ -8,6 +10,23 @@ router = APIRouter(prefix="/api", tags=["meta"])
 @router.get("/health")
 def health():
     return {"status": "ok"}
+
+
+class MaskTestRequest(BaseModel):
+    lines: list[str]
+
+
+class MaskTestResponse(BaseModel):
+    masked: list[str]
+
+
+@router.post("/mask/test", response_model=MaskTestResponse)
+def mask_test(body: MaskTestRequest):
+    """Dev-only: run the local regex masker on posted text, bypassing AWS.
+
+    For manually verifying mask_message() coverage via curl.
+    """
+    return MaskTestResponse(masked=[mask_message(line) for line in body.lines])
 
 
 @router.get("/config")
