@@ -10,14 +10,6 @@ export function CloudWatchSourcePicker() {
   const logGroupNames = useSelectionStore((s) => s.logGroupNames);
   const setLogGroupNames = useSelectionStore((s) => s.setLogGroupNames);
 
-  const toggleGroup = (name: string) => {
-    setLogGroupNames(
-      logGroupNames.includes(name)
-        ? logGroupNames.filter((n) => n !== name)
-        : [...logGroupNames, name]
-    );
-  };
-
   return (
     <div className="panel-section">
       <div className="panel-section-title">CloudWatch log groups</div>
@@ -34,9 +26,10 @@ export function CloudWatchSourcePicker() {
           <li key={group.name}>
             <label>
               <input
-                type="checkbox"
+                type="radio"
+                name="log-group"
                 checked={logGroupNames.includes(group.name)}
-                onChange={() => toggleGroup(group.name)}
+                onChange={() => setLogGroupNames([group.name])}
               />
               {group.name}
             </label>
