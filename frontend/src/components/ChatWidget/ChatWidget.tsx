@@ -12,6 +12,7 @@ interface ChatTurn {
   role: "user" | "assistant";
   content: string;
   isError?: boolean;
+  isGreeting?: boolean;
   stats?: Pick<
     AnalysisResponse,
     "chunks_analyzed" | "chunks_total" | "lines_considered" | "lines_skipped_by_prefilter" | "model" | "warnings"
@@ -19,6 +20,8 @@ interface ChatTurn {
 }
 
 let nextTurnId = 0;
+
+const GREETING = "Hello! How can I help you today?";
 
 function errorMessage(error: unknown): string {
   if (isAxiosError(error) && error.response?.status === 429) {
@@ -40,53 +43,34 @@ export function ChatWidget() {
   const [messages, setMessages] = useState<ChatTurn[]>([]);
   const [input, setInput] = useState("");
   const analysis = useAnomalyAnalysis();
-  const autoScanFired = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // A new search means a new log slice — the running conversation no longer applies.
   useEffect(() => {
-    autoScanFired.current = false;
     setMessages([]);
   }, [events]);
 
+  // Greet once when the chat is opened (or reopened after a new search cleared it).
   useEffect(() => {
-    if (!isOpen || events.length === 0 || autoScanFired.current) return;
-    autoScanFired.current = true;
-    analysis.mutate(
-      { userPrompt: "", history: [] },
-      {
-        onSuccess: (data) => {
-          setMessages([
-            {
-              id: nextTurnId++,
-              role: "assistant",
-              content: data.analysis.trim() || "No noteworthy problems were detected.",
-              stats: data,
-            },
-          ]);
-        },
-        onError: (error) => {
-          setMessages([
-            { id: nextTurnId++, role: "assistant", isError: true, content: errorMessage(error) },
-          ]);
-        },
-      }
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, events]);
+    if (!isOpen || messages.length > 0) return;
+    setMessages([{ id: nextTurnId++, role: "assistant", isGreeting: true, content: GREETING }]);
+  }, [isOpen, messages.length]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ block: "end" });
   }, [messages, analysis.isPending]);
 
+  function buildHistory(): ChatMessage[] {
+    return messages
+      .filter((m) => !m.isError && !m.isGreeting)
+      .map((m) => ({ role: m.role, content: m.content }));
+  }
+
   function handleSend() {
     const text = input.trim();
     if (!text || analysis.isPending) return;
 
-    const history: ChatMessage[] = messages
-      .filter((m) => !m.isError)
-      .map((m) => ({ role: m.role, content: m.content }));
-
+    const history = buildHistory();
     setMessages((prev) => [...prev, { id: nextTurnId++, role: "user", content: text }]);
     setInput("");
 
@@ -100,6 +84,38 @@ export function ChatWidget() {
               id: nextTurnId++,
               role: "assistant",
               content: data.analysis.trim() || "No analysis text for this slice.",
+            },
+          ]);
+        },
+        onError: (error) => {
+          setMessages((prev) => [
+            ...prev,
+            { id: nextTurnId++, role: "assistant", isError: true, content: errorMessage(error) },
+          ]);
+        },
+      }
+    );
+  }
+
+  function handleScan() {
+    if (analysis.isPending || events.length === 0) return;
+
+    setMessages((prev) => [
+      ...prev,
+      { id: nextTurnId++, role: "user", content: "Scan for errors and anomalies" },
+    ]);
+
+    analysis.mutate(
+      { userPrompt: "", history: [] },
+      {
+        onSuccess: (data) => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: nextTurnId++,
+              role: "assistant",
+              content: data.analysis.trim() || "No noteworthy problems were detected.",
+              stats: data,
             },
           ]);
         },
@@ -157,44 +173,36 @@ export function ChatWidget() {
           )}
 
           <div className="chat-messages">
-            {events.length === 0 ? (
-              <p className="hint chat-empty-hint">
-                Load logs from the sidebar to start a conversation.
-              </p>
-            ) : messages.length === 0 && !analysis.isPending ? (
-              <p className="hint chat-empty-hint">Ready to scan {events.length} lines.</p>
-            ) : (
-              messages.map((m) => (
-                <div key={m.id} className={`chat-bubble chat-bubble-${m.role}`}>
-                  {m.isError ? (
-                    <p className="error-text">{m.content}</p>
-                  ) : m.role === "assistant" ? (
-                    <AnalysisResult text={m.content} className="chat-bubble-text" />
-                  ) : (
-                    <p className="chat-bubble-text">{m.content}</p>
-                  )}
-                  {m.stats && (
-                    <div className="stats-row">
-                      <span className="stat-badge">
-                        {m.stats.lines_considered}/{events.length} lines analyzed
-                      </span>
-                      <span className="stat-badge">
-                        {m.stats.lines_skipped_by_prefilter} skipped by prefilter
-                      </span>
-                      <span className="stat-badge">
-                        {m.stats.chunks_analyzed}/{m.stats.chunks_total} chunks
-                      </span>
-                      <span className="stat-badge">{m.stats.model}</span>
-                    </div>
-                  )}
-                  {m.stats?.warnings.map((w, i) => (
-                    <p key={i} className="warning-text">
-                      {w}
-                    </p>
-                  ))}
-                </div>
-              ))
-            )}
+            {messages.map((m) => (
+              <div key={m.id} className={`chat-bubble chat-bubble-${m.role}`}>
+                {m.isError ? (
+                  <p className="error-text">{m.content}</p>
+                ) : m.role === "assistant" && !m.isGreeting ? (
+                  <AnalysisResult text={m.content} className="chat-bubble-text" />
+                ) : (
+                  <p className="chat-bubble-text">{m.content}</p>
+                )}
+                {m.stats && (
+                  <div className="stats-row">
+                    <span className="stat-badge">
+                      {m.stats.lines_considered}/{events.length} lines analyzed
+                    </span>
+                    <span className="stat-badge">
+                      {m.stats.lines_skipped_by_prefilter} skipped by prefilter
+                    </span>
+                    <span className="stat-badge">
+                      {m.stats.chunks_analyzed}/{m.stats.chunks_total} chunks
+                    </span>
+                    <span className="stat-badge">{m.stats.model}</span>
+                  </div>
+                )}
+                {m.stats?.warnings.map((w, i) => (
+                  <p key={i} className="warning-text">
+                    {w}
+                  </p>
+                ))}
+              </div>
+            ))}
             {analysis.isPending && (
               <div className="chat-bubble chat-bubble-assistant chat-bubble-pending">
                 <span className="spinner dark" />
@@ -203,6 +211,19 @@ export function ChatWidget() {
             )}
             <div ref={messagesEndRef} />
           </div>
+
+          {events.length > 0 && (
+            <div className="chat-quick-actions">
+              <button
+                type="button"
+                className="chip"
+                disabled={analysis.isPending}
+                onClick={handleScan}
+              >
+                Scan for anomalies
+              </button>
+            </div>
+          )}
 
           <div className="chat-input-row">
             <textarea

@@ -36,7 +36,7 @@ PROMPT_VERSION = "log_analysis/v1"
 
 # Exact string the model is told to emit for off-topic questions. Kept here so
 # the caller can detect it without duplicating the literal.
-OUT_OF_SCOPE_REPLY = "I can only analyze the provided log data."
+OUT_OF_SCOPE_REPLY = "Sorry! I can only analyze the provided log data."
 
 SYSTEM_PROMPT = dedent(
     """\

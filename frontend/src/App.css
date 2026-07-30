@@ -615,6 +615,13 @@
   color: var(--text-secondary);
 }
 
+.chat-quick-actions {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.6rem 0.9rem 0;
+  flex-shrink: 0;
+}
+
 .chat-input-row {
   display: flex;
   align-items: flex-end;
