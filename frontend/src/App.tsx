@@ -15,7 +15,7 @@ function App() {
     <div className="app-layout">
       <header className="app-header">
         <span className="logo-dot" />
-        <h1></h1>
+        <h1>TraceMind</h1>
       </header>
       <div className="app-body">
         <aside className="sidebar">

@@ -15,6 +15,7 @@ from app.services import log_filter
 from app.services.llm.base import LLMProvider, LLMRateLimited, ProviderDefaults
 from app.services.llm.prompt import build_prompt
 from app.services.llm.registry import PROVIDERS, get_provider_class
+from app.services.masking import mask_message
 
 
 class AnomalyService:
@@ -38,6 +39,19 @@ class AnomalyService:
         base_url: str | None = None,
         user_prompt: str | None = None,
     ) -> AnalysisResponse:
+        if len(events) > self.settings.max_log_search_lines:
+            raise BadRequestError(
+                f"Too many events in one analysis request ({len(events)}); "
+                f"max is {self.settings.max_log_search_lines}."
+            )
+
+        # Defense in depth: masking.py is applied when events are first fetched
+        # from CloudWatch/CloudTrail, but this endpoint accepts a raw events
+        # array from the client — re-mask here so a caller that bypasses the
+        # normal fetch path can't leak unmasked secrets/PII to an LLM provider.
+        # mask_message is idempotent, so this is a no-op for already-masked text.
+        events = [e.model_copy(update={"message": mask_message(e.message)}) for e in events]
+
         provider_cls = get_provider_class(provider)
         defaults = self._defaults[provider]
         effective_model = model or defaults.model

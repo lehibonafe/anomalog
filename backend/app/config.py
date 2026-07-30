@@ -39,6 +39,9 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:5173"]
 
+    # Inbound API abuse guard (per-client-IP, per-process — see InboundRateLimiter)
+    inbound_rate_limit_per_minute: int = 120
+
     model_config = SettingsConfigDict(env_file=".env", env_prefix="", extra="ignore")
 
 

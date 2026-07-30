@@ -7,9 +7,10 @@ slice — either the default error/anomaly scan, or a custom prompt ("find all
 failed logins for user X"). Findings cite line numbers and click-to-highlight
 the matching lines in the viewer.
 
-Supported LLM providers: **Gemini** (default — free tier, server-configured
-key) plus **OpenAI**, **Anthropic**, and **Ollama** (local), each opt-in per
-request via the UI's Model settings. Only the Gemini key is required to boot.
+Supported LLM providers: **LiteLLM** (default — the team's internal proxy,
+server-configured key/model/base URL) plus **Gemini**, **OpenAI**,
+**Anthropic**, and **Ollama** (local), each opt-in per request via the UI's
+Model settings. Only the LiteLLM key is required to boot.
 
 ## Architecture
 
@@ -24,6 +25,12 @@ when deployed onto AWS compute. Leave `AWS_PROFILE` blank if you export keys
 directly — setting it forces boto3 to use that profile instead, ignoring
 exported env vars. (An empty `AWS_PROFILE` is treated as unset, including when
 Docker exports the blank line as an empty env var.)
+
+Every log line is masked for credentials/secrets/PII (`backend/app/services/masking.py`)
+before it reaches the UI or any LLM — via an external masking service when
+`MASKING_SERVICE_API_KEY` is set (falling back to local regex masking on any
+failure), or local regex masking only otherwise. This isn't configurable per
+request; it always runs.
 
 LLM free tiers have real rate/quota limits, so before any log slice is sent to
 a model the backend prefilters for errors/exceptions/stack traces, caps total
@@ -41,7 +48,7 @@ still apply.
 cd backend
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # fill in GEMINI_API_KEY
+cp .env.example .env   # fill in LITELLM_API_KEY (Gemini/OpenAI/Anthropic/Ollama are opt-in, no key needed to boot)
 ```
 
 ### Frontend
@@ -99,15 +106,18 @@ Then open http://localhost:5173.
    blank for the default error/anomaly scan.
 4. Click **Analyze logs**. Each finding cites the log lines it's based on —
    click a finding card to scroll to and highlight those lines.
-5. To use OpenAI/Anthropic/Ollama instead of the server's Gemini key, open
-   **Model settings** in the analysis panel and supply a provider + API key
-   (Ollama needs a base URL instead).
+5. To use Gemini/OpenAI/Anthropic/Ollama instead of the server's LiteLLM
+   proxy, open **Model settings** in the analysis panel and supply a
+   provider + API key (Ollama needs a base URL instead).
 
 ## Deploying on a remote host (e.g. EC2)
 
 The app has **no authentication** — restrict access at the network layer
 (security group scoped to your IP, VPN, or an authenticated reverse proxy).
-Beyond that:
+There is a lightweight per-IP inbound rate limit (`INBOUND_RATE_LIMIT_PER_MINUTE`,
+default 120/min) as an abuse guard, but it's not a substitute for real access
+control, and it's per-worker — see `backend/app/core/rate_limiter.py`. Beyond
+that:
 
 - `VITE_API_BASE_URL` (`frontend/.env`) and `CORS_ORIGINS` (`backend/.env`)
   are **browser-facing** values: set them to the host's public address, not

@@ -9,8 +9,9 @@ CloudTrail events: pick a source (log group(s), or CloudTrail lookup
 attributes) and time range, view matching log lines, and run an LLM analysis
 over the filtered slice —
 by default flagging errors/exceptions/stack traces/anomalies, or steered by an
-optional user-supplied prompt (Gemini free tier by default; OpenAI/Anthropic/
-Ollama opt-in per request). Two services: `backend/` (FastAPI) and
+optional user-supplied prompt (LiteLLM — the team's internal proxy — by
+default; Gemini/OpenAI/Anthropic/Ollama opt-in per request). Two services:
+`backend/` (FastAPI) and
 `frontend/` (React + TypeScript + Vite), run independently, no shared build step.
 
 ## Commands
@@ -20,7 +21,7 @@ Ollama opt-in per request). Two services: `backend/` (FastAPI) and
 ```bash
 python3 -m venv .venv && source .venv/bin/activate   # first time only
 pip install -r requirements.txt                       # first time / after deps change
-cp .env.example .env                                   # first time; fill in GEMINI_API_KEY
+cp .env.example .env                                   # first time; fill in LITELLM_API_KEY
 
 uvicorn app.main:app --reload --port 8000              # run dev server
 python -m pytest tests/                                 # run all tests
@@ -32,8 +33,8 @@ python -m pytest tests/services/llm/ -v                # run just the per-provid
 Tests must be invoked with `python -m pytest` (not bare `pytest`) or from within
 the activated venv — `pytest.ini` sets `pythonpath = .` so `app.*` imports
 resolve regardless, but the venv must be active for dependencies to be found.
-`GEMINI_API_KEY` must be a non-empty string for `Settings` to construct (tests
-use a dummy value like `test-key`; no real LLM calls happen in the test suite —
+`LITELLM_API_KEY` must be a non-empty string for `Settings` to construct (tests
+use a dummy value like `test-litellm-key`; no real LLM calls happen in the test suite —
 each provider test mocks that provider's own SDK client method with
 `AsyncMock`, and `test_anomaly_service.py` monkeypatches either
 `AnomalyService._call_chunk` or a provider class's `call_chunk`).
@@ -76,14 +77,22 @@ host's `~/.aws` read-only to `/root/.aws` (container runs as root), and
 ```
 Browser (React/Vite, :5173) → axios (JSON) → FastAPI backend (:8000)
                                                  ├── boto3 → CloudWatch Logs / CloudTrail
-                                                 └── provider SDKs → Gemini (default) /
-                                                     OpenAI / Anthropic / Ollama
+                                                 ├── external masking service (pii.etapinc.com)
+                                                 │   → falls back to local regex masking
+                                                 └── provider SDKs → LiteLLM proxy (default) /
+                                                     Gemini / OpenAI / Anthropic / Ollama
 ```
 
 No database. No app-level auth — this is local-only, single-user; AWS
-credentials and the Gemini API key are the real access boundary. The backend
-is stateless per request except for one in-process Gemini rate limiter shared
-across requests (see below).
+credentials and the LiteLLM API key are the real access boundary. There is a
+lightweight per-client-IP inbound rate limit (`Settings.inbound_rate_limit_per_minute`,
+`core/rate_limiter.py::InboundRateLimiter`, wired in `main.py`) as an abuse
+guard against runaway AWS API usage or LLM spend, but it's not a substitute
+for real access control at the network layer (see README's deploy section).
+The backend is otherwise stateless per request except for one in-process
+per-provider LLM rate limiter shared across requests (see below) — both
+limiters are per-*process* state, so effective limits scale with worker count
+under multiple uvicorn workers (see the caveat in `rate_limiter.py`).
 
 ### AWS auth (works unchanged local → deployed)
 
@@ -126,17 +135,41 @@ assigned once, in final display order, per response.
 
 ### Sensitive data masking
 
-`services/masking.py::mask_message` is applied unconditionally to every
-`LogEvent.message` at the source — inline in `cloudwatch_service.search_log_events`
-and `cloudtrail_service.lookup_events`, before `line_index` is assigned. It
-regex-redacts credentials/secrets (AWS access keys, JWTs, Bearer/Basic auth
-headers, `password=`/`api_key=`/etc. key-value pairs) and PII (emails, SSNs,
-phone numbers, credit card numbers validated via Luhn to avoid false-positiving
-on arbitrary digit sequences like ports or IDs) to `***MASKED***`. There is no
-config flag or per-request toggle to disable it — masking always runs before
-data reaches the frontend or any LLM provider. Because it runs before
-`line_index` assignment, the UI and the LLM always see the same (masked) text,
-preserving the line-index contract above.
+`services/masking.py::mask_messages_batch` is applied unconditionally to
+every page of `LogEvent.message`s at the source — inline in
+`cloudwatch_service.search_log_events` and `cloudtrail_service.lookup_events`,
+before `line_index` is assigned. There is no config flag or per-request
+toggle to disable it — masking always runs before data reaches the frontend
+or any LLM provider. Because it runs before `line_index` assignment, the UI
+and the LLM always see the same (masked) text, preserving the line-index
+contract above.
+
+Two masking paths, resolved per call:
+- **External service** (`masking_service_url`, default `https://pii.etapinc.com`)
+  when `MASKING_SERVICE_API_KEY` is set: `_mask_chunk_external` POSTs
+  sub-batches (`masking_service_batch_size`) to `/api/mask/structured/`. Any
+  failure (connection error, timeout, 4xx/5xx, malformed response) is caught
+  and logged, never raised — the batch falls back to local regex masking, and
+  once one sub-batch fails, the rest of that call skips the external service
+  entirely (fail-fast, so a fully-down service costs ~one timeout, not one per
+  sub-batch). `masking_service_verify_ssl` defaults to `False` because
+  `pii.etapinc.com` currently serves a self-signed cert — `get_masking_http_client`
+  logs a warning on every client construction while this is the case; flip it
+  to `True` once a trusted cert is issued.
+- **Local regex fallback** (`mask_message`, always available, no external
+  dependency): redacts credentials/secrets (AWS access keys, JWTs,
+  Bearer/Basic auth headers, `password=`/`api_key=`/etc. key-value pairs) and
+  PII (emails, SSNs, phone numbers, credit card numbers validated via Luhn to
+  avoid false-positiving on arbitrary digit sequences like ports or IDs) to
+  `***MASKED***`. Used directly whenever `MASKING_SERVICE_API_KEY` is unset.
+
+`AnomalyService.analyze` (`anomaly_service.py`) also re-applies `mask_message`
+(local-only, not the external service — kept cheap/synchronous at this layer)
+to every event's message before building prompts, as defense in depth: unlike
+the CloudWatch/CloudTrail fetch paths, `POST /api/analysis/anomalies` accepts
+a client-supplied `events` array directly, so this re-masking guards against
+any caller that bypasses the normal fetch-then-analyze flow. `mask_message` is
+idempotent, so this is a no-op for text already masked upstream.
 
 ### CloudWatch time-range cap
 
@@ -165,19 +198,24 @@ noted upgrade path — not implemented here.
 
 ### Multi-provider LLM abstraction (`services/llm/` + `anomaly_service.py`)
 
-Analysis supports four providers — Gemini, OpenAI, Anthropic, and
+Analysis supports five providers — LiteLLM, Gemini, OpenAI, Anthropic, and
 Ollama (local) — selected per-request via `AnalysisRequest.provider`
-(defaults to `"gemini"`, matching pre-multi-provider behavior).
-`AnalysisRequest.user_prompt` (optional) swaps only the instruction block
-inside the shared `build_prompt`: blank → the default anomaly/error scan;
-set → the LLM answers the user's request instead. Both modes return the same
-shape — free-form prose citing `line_index` values inline — so the
-line-index contract and click-to-highlight work identically; don't fork the
-output format per mode. Only Gemini has a server-configured default key
-(`Settings.gemini_api_key`, required at boot); the other three are purely
-opt-in via the frontend's "Model settings" override fields
-(`AnomalyPanel.tsx`) — there are no required `Settings` fields for them, so
-the app still boots with zero config beyond today's Gemini key.
+(defaults to `"litellm"`). `AnalysisRequest.user_prompt` (optional) swaps only
+the instruction block inside the shared `build_prompt`: blank → the default
+anomaly/error scan; set → the LLM answers the user's request instead. Both
+modes return the same shape — free-form prose citing `line_index` values
+inline — so the line-index contract and click-to-highlight work identically;
+don't fork the output format per mode. LiteLLM and Gemini have
+server-configured default keys (`Settings.litellm_api_key`, required at boot;
+`Settings.gemini_api_key`, optional); the other three are purely opt-in via
+the frontend's "Model settings" override fields (`AnomalyPanel.tsx`) — there
+are no required `Settings` fields for them, so the app still boots with zero
+config beyond today's LiteLLM key.
+
+`POST /api/analysis/anomalies` also rejects (`BadRequestError`, HTTP 400)
+requests with more than `Settings.max_log_search_lines` events, since the
+client supplies that array directly and it isn't bounded by a server-side
+fetch like the search endpoints are.
 
 Each provider lives in `backend/app/services/llm/<name>_provider.py` and
 implements the `LLMProvider` ABC (`services/llm/base.py`): constructed fresh
@@ -188,6 +226,13 @@ plain text, not schema-validated JSON. The LLM is deliberately **not**
 constrained to any structured output mode here (no `response_schema`,
 `.parse()`, forced tool-use, or JSON mode) — each provider just takes
 whatever plain-language text the model returns:
+- **LiteLLM** (`LiteLLMProvider(OpenAIProvider)`): points an `AsyncOpenAI`
+  client at the team's internal proxy (`litellm_base_url`, default
+  `http://llm.etapinc.com/v1`) — the proxy speaks the OpenAI-compatible
+  `/v1/chat/completions` route and authenticates callers via a virtual key it
+  generates, not the underlying model provider's own key. Inherits
+  `call_chunk` unchanged from `OpenAIProvider`; only `__init__`/
+  `resolve_defaults` differ.
 - **Gemini**: `generate_content(contents=prompt)`, `resp.text` wrapped as-is.
 - **OpenAI**: `client.chat.completions.create(...)` (not `.parse()`),
   `completion.choices[0].message.content`.
@@ -221,7 +266,7 @@ Orchestration (provider-agnostic, must not change per-provider) lives in
 4. Each chunk goes through a **process-wide, per-provider** `RateLimiter`
    (`core/rate_limiter.py`) — `AnomalyService` resolves one
    `ProviderDefaults`/`RateLimiter` pair per provider name at construction
-   (Gemini's RPM/retries come from `Settings`; the other three are hardcoded
+   (Gemini's RPM/retries come from `Settings`; the other four are hardcoded
    constants in their own provider files), and the service itself is an
    `lru_cache`d singleton (`anomaly_service.get_anomaly_service`) so pacing
    holds across separate HTTP requests, not just within one `analyze()` call.
