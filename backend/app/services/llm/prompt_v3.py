@@ -6,6 +6,10 @@ correlated with a quality regression later. When you change the wording in a way
 that could move output quality, bump to v4 as a new module rather than editing
 this one in place.
 
+v3 adds a carve-out to USER_REQUEST_TASK so a conversational reply (an
+acknowledgement, "thanks", "ok") gets a short reply instead of a full log
+re-analysis — v2 had no branch for that and always fell back to analysing.
+
 SYSTEM_PROMPT is entirely static: no interpolation, no per-request content. That
 is what makes it a stable prompt-cache prefix. Anything that varies per request
 belongs in the user turn.
@@ -13,14 +17,6 @@ belongs in the user turn.
 Deliberately written without Markdown syntax (no ``-`` bullets, no ``#``
 headings, no ``**bold**``). Models mirror the formatting of their context, and
 the output contract here is plain prose.
-
-v3 change (over v2): USER_REQUEST_TASK previously told the model to "attempt
-the analysis whenever the request relates in any way to examining, explaining,
-or summarising the log data" with no carve-out for messages that aren't really
-asking anything -- a chat reply like "Okay, thanks" would still trigger a full
-anomaly re-scan, because nothing told the model it was allowed to just reply
-naturally. Added an explicit instruction for greetings/acknowledgements/small
-talk so those get a short, direct reply instead of a repeated analysis.
 """
 
 from textwrap import dedent
@@ -164,16 +160,16 @@ USER_REQUEST_TASK = dedent(
     {user_prompt}
     </user_request>
 
-    Analyse the supplied log entries in light of this request, following the
-    evidence, citation and output rules you were given. Attempt the analysis
-    whenever the request relates in any way to examining, explaining, or
-    summarising the log data. If the evidence is thin, say so plainly
-    rather than guessing; an honest "the logs do not show X" is a correct
-    answer.
+    If the request is a greeting, acknowledgement, or other remark that is not
+    asking about the logs (for example "thanks", "ok", "got it"), reply
+    briefly and naturally and do not repeat an analysis.
 
-    If the request is instead a greeting, acknowledgement, thanks, or other
-    remark that is not actually asking about the logs, do not repeat an
-    analysis. Reply briefly and naturally instead, the way a colleague would.
+    Otherwise, analyse the supplied log entries in light of this request,
+    following the evidence, citation and output rules you were given. Attempt
+    the analysis whenever the request relates in any way to examining,
+    explaining, or summarising the log data. If the evidence is thin, say so
+    plainly rather than guessing; an honest "the logs do not show X" is a
+    correct answer.
     """
 )
 
@@ -207,7 +203,7 @@ def build_prompt(
 ) -> str:
     """Builds the per-request user turn: source + logs (+ conversation history,
     for chat follow-ups) + task. Send alongside SYSTEM_PROMPT as a separate
-    system-role message -- see the module docstring for why it's kept apart."""
+    system-role message — see the module docstring for why it's kept apart."""
     lines = "\n".join(f"[{e.line_index}] {e.timestamp or ''} {e.message}" for e in events)
     source = SOURCE_TEMPLATE.format(source_description=context.source_description)
     logs = LOGS_TEMPLATE.format(lines=lines)
