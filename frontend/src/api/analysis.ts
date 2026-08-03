@@ -7,11 +7,13 @@ import type {
 } from "./types";
 
 export async function runAnomalyAnalysis(
-  request: AnalysisRequest
+  request: AnalysisRequest,
+  signal?: AbortSignal
 ): Promise<AnalysisResponse> {
   const { data } = await apiClient.post<AnalysisResponse>(
     "/api/analysis/anomalies",
-    request
+    request,
+    { signal }
   );
   return data;
 }

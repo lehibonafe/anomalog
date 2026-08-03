@@ -1,4 +1,4 @@
-import { isAxiosError } from "axios";
+import axios, { isAxiosError } from "axios";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import type { AnalysisResponse, ChatMessage } from "../../api/types";
@@ -44,6 +44,7 @@ export function ChatWidget() {
   const [input, setInput] = useState("");
   const analysis = useAnomalyAnalysis();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // A new search means a new log slice — the running conversation no longer applies.
   useEffect(() => {
@@ -74,8 +75,11 @@ export function ChatWidget() {
     setMessages((prev) => [...prev, { id: nextTurnId++, role: "user", content: text }]);
     setInput("");
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     analysis.mutate(
-      { userPrompt: text, history },
+      { userPrompt: text, history, signal: controller.signal },
       {
         onSuccess: (data) => {
           setMessages((prev) => [
@@ -88,6 +92,7 @@ export function ChatWidget() {
           ]);
         },
         onError: (error) => {
+          if (axios.isCancel(error)) return;
           setMessages((prev) => [
             ...prev,
             { id: nextTurnId++, role: "assistant", isError: true, content: errorMessage(error) },
@@ -95,6 +100,10 @@ export function ChatWidget() {
         },
       }
     );
+  }
+
+  function handleStop() {
+    abortControllerRef.current?.abort();
   }
 
   function handleScan() {
@@ -105,8 +114,11 @@ export function ChatWidget() {
       { id: nextTurnId++, role: "user", content: "Scan for errors and anomalies" },
     ]);
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     analysis.mutate(
-      { userPrompt: "", history: [] },
+      { userPrompt: "", history: [], signal: controller.signal },
       {
         onSuccess: (data) => {
           setMessages((prev) => [
@@ -120,6 +132,7 @@ export function ChatWidget() {
           ]);
         },
         onError: (error) => {
+          if (axios.isCancel(error)) return;
           setMessages((prev) => [
             ...prev,
             { id: nextTurnId++, role: "assistant", isError: true, content: errorMessage(error) },
@@ -234,14 +247,25 @@ export function ChatWidget() {
               disabled={events.length === 0 || analysis.isPending}
               rows={1}
             />
-            <button
-              type="button"
-              className="btn-primary chat-send-button"
-              disabled={events.length === 0 || analysis.isPending || !input.trim()}
-              onClick={handleSend}
-            >
-              Send
-            </button>
+            {analysis.isPending ? (
+              <button
+                type="button"
+                className="chat-stop-button"
+                aria-label="Stop analysis"
+                onClick={handleStop}
+              >
+                <span className="chat-stop-icon" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn-primary chat-send-button"
+                disabled={events.length === 0 || !input.trim()}
+                onClick={handleSend}
+              >
+                Send
+              </button>
+            )}
           </div>
         </div>
       )}

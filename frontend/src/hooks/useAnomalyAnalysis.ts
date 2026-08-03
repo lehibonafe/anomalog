@@ -7,6 +7,7 @@ import { useSelectionStore } from "../state/selectionStore";
 export interface AnomalyAnalysisVars {
   userPrompt: string;
   history?: ChatMessage[];
+  signal?: AbortSignal;
 }
 
 export function useAnomalyAnalysis() {
@@ -18,16 +19,19 @@ export function useAnomalyAnalysis() {
   const llmBaseUrl = useSelectionStore((s) => s.llmBaseUrl);
 
   return useMutation<AnalysisResponse, Error, AnomalyAnalysisVars>({
-    mutationFn: ({ userPrompt, history }) =>
-      runAnomalyAnalysis({
-        events,
-        context: { source_description: sourceDescription || "Selected log slice" },
-        provider: llmProvider,
-        api_key: llmApiKey.trim() || null,
-        model: llmModel.trim() || null,
-        base_url: llmBaseUrl.trim() || null,
-        user_prompt: userPrompt.trim() || null,
-        history: history ?? [],
-      }),
+    mutationFn: ({ userPrompt, history, signal }) =>
+      runAnomalyAnalysis(
+        {
+          events,
+          context: { source_description: sourceDescription || "Selected log slice" },
+          provider: llmProvider,
+          api_key: llmApiKey.trim() || null,
+          model: llmModel.trim() || null,
+          base_url: llmBaseUrl.trim() || null,
+          user_prompt: userPrompt.trim() || null,
+          history: history ?? [],
+        },
+        signal
+      ),
   });
 }
