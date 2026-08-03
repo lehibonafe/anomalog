@@ -14,7 +14,7 @@ from app.schemas.analysis import (
 from app.schemas.common import LogEvent
 from app.services import log_filter
 from app.services.llm.base import LLMProvider, LLMRateLimited, ProviderDefaults
-from app.services.llm.prompt_v3 import SYSTEM_PROMPT, build_prompt
+from app.services.llm.prompt import SYSTEM_PROMPT, build_prompt
 from app.services.llm.registry import PROVIDERS, get_provider_class
 from app.services.masking import mask_message
 
