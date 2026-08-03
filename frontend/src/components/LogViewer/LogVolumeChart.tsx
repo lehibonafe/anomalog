@@ -9,6 +9,8 @@ interface Bucket {
   start: Date;
   end: Date;
   count: number;
+  minLineIndex: number | null;
+  maxLineIndex: number | null;
 }
 
 function buildBuckets(events: LogEvent[], rangeStart: Date, rangeEnd: Date): Bucket[] {
@@ -21,6 +23,8 @@ function buildBuckets(events: LogEvent[], rangeStart: Date, rangeEnd: Date): Buc
     start: new Date(startMs + i * bucketMs),
     end: new Date(startMs + (i + 1) * bucketMs),
     count: 0,
+    minLineIndex: null,
+    maxLineIndex: null,
   }));
 
   for (const event of events) {
@@ -28,7 +32,12 @@ function buildBuckets(events: LogEvent[], rangeStart: Date, rangeEnd: Date): Buc
     const t = new Date(event.timestamp).getTime();
     if (Number.isNaN(t) || t < startMs || t > endMs) continue;
     const idx = Math.min(BUCKET_COUNT - 1, Math.max(0, Math.floor((t - startMs) / bucketMs)));
-    buckets[idx].count += 1;
+    const bucket = buckets[idx];
+    bucket.count += 1;
+    bucket.minLineIndex =
+      bucket.minLineIndex === null ? event.line_index : Math.min(bucket.minLineIndex, event.line_index);
+    bucket.maxLineIndex =
+      bucket.maxLineIndex === null ? event.line_index : Math.max(bucket.maxLineIndex, event.line_index);
   }
 
   return buckets;
@@ -42,11 +51,12 @@ interface LogVolumeChartProps {
   events: LogEvent[];
   rangeStart: string;
   rangeEnd: string;
+  onBucketClick?: (range: { start: number; end: number }) => void;
 }
 
 const CHART_HEIGHT = 48;
 
-export function LogVolumeChart({ events, rangeStart, rangeEnd }: LogVolumeChartProps) {
+export function LogVolumeChart({ events, rangeStart, rangeEnd, onBucketClick }: LogVolumeChartProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   const range = useMemo(() => {
@@ -77,18 +87,31 @@ export function LogVolumeChart({ events, rangeStart, rangeEnd }: LogVolumeChartP
       <div className="log-volume-bars" style={{ height: CHART_HEIGHT }}>
         {buckets.map((bucket, i) => {
           const heightPx = bucket.count === 0 ? 0 : Math.max(2, Math.round((bucket.count / maxCount) * CHART_HEIGHT));
+          const hasData = bucket.count > 0 && bucket.minLineIndex !== null && bucket.maxLineIndex !== null;
+          const activate = () => {
+            if (hasData && onBucketClick) {
+              onBucketClick({ start: bucket.minLineIndex!, end: bucket.maxLineIndex! });
+            }
+          };
           return (
             <div
               key={i}
-              className={`log-volume-bar${hoveredIndex === i ? " hovered" : ""}`}
+              className={`log-volume-bar${hoveredIndex === i ? " hovered" : ""}${hasData && onBucketClick ? " clickable" : ""}`}
               style={{ height: heightPx }}
-              tabIndex={bucket.count > 0 ? 0 : -1}
-              role="graphics-symbol"
+              tabIndex={hasData ? 0 : -1}
+              role={hasData && onBucketClick ? "button" : "graphics-symbol"}
               aria-label={`${bucket.count} lines, ${bucketLabel(bucket.start, bucket.end)}`}
               onMouseEnter={() => setHoveredIndex(i)}
               onMouseLeave={() => setHoveredIndex((v) => (v === i ? null : v))}
               onFocus={() => setHoveredIndex(i)}
               onBlur={() => setHoveredIndex((v) => (v === i ? null : v))}
+              onClick={activate}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  activate();
+                }
+              }}
             />
           );
         })}

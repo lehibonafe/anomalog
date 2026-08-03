@@ -120,6 +120,10 @@
   border-radius: 4px 4px 0 0;
 }
 
+.log-volume-bar.clickable {
+  cursor: pointer;
+}
+
 .log-volume-bar:hover,
 .log-volume-bar.hovered,
 .log-volume-bar:focus-visible {

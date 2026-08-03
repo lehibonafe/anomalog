@@ -128,7 +128,12 @@ export function LogViewer() {
         </span>
       </div>
       {startTime && endTime && (
-        <LogVolumeChart events={filteredEvents} rangeStart={startTime} rangeEnd={endTime} />
+        <LogVolumeChart
+          events={filteredEvents}
+          rangeStart={startTime}
+          rangeEnd={endTime}
+          onBucketClick={setHighlightedRange}
+        />
       )}
       {filteredEvents.length === 0 ? (
         <div className="log-viewer-empty">
