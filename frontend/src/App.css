@@ -70,6 +70,98 @@
   white-space: nowrap;
 }
 
+.log-viewer-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.log-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.log-filter-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.log-filter-count {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.log-volume-chart {
+  position: relative;
+  padding: 0.7rem 1rem 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.log-volume-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.log-volume-bar {
+  flex: 1;
+  min-width: 1px;
+  max-width: 24px;
+  background-color: var(--accent);
+  border-radius: 4px 4px 0 0;
+}
+
+.log-volume-bar:hover,
+.log-volume-bar.hovered,
+.log-volume-bar:focus-visible {
+  background-color: var(--accent-hover);
+  outline: none;
+}
+
+.log-volume-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.3rem;
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+}
+
+.log-volume-tooltip {
+  position: absolute;
+  top: 0.2rem;
+  right: 1rem;
+  background-color: var(--bg-surface-raised);
+  border: 1px solid var(--border-color-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  padding: 0.3rem 0.55rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  pointer-events: none;
+}
+
+.log-volume-tooltip strong {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.log-volume-tooltip-range {
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
 .log-viewer {
   flex: 1;
   min-height: 0;
