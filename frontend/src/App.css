@@ -816,6 +816,15 @@
   white-space: pre-wrap;
 }
 
+.analysis-code {
+  font-family: "SF Mono", ui-monospace, "Cascadia Code", monospace;
+  font-size: 0.9em;
+  background-color: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+}
+
 .line-ref {
   display: inline;
   border: none;
