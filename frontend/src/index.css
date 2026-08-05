@@ -22,6 +22,10 @@
   --severity-success: #3fb572;
   --severity-success-bg: rgba(63, 181, 114, 0.12);
 
+  --json-string: #7ec699;
+  --json-number: #d9a66c;
+  --json-boolean: #c58ee0;
+
   --radius-sm: 5px;
   --radius-md: 8px;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
@@ -61,6 +65,10 @@
     --severity-warning-bg: rgba(191, 128, 15, 0.08);
     --severity-info-bg: rgba(38, 120, 176, 0.08);
     --severity-success-bg: rgba(38, 143, 89, 0.08);
+
+    --json-string: #2f8f5b;
+    --json-number: #b06f1f;
+    --json-boolean: #9b4fc4;
 
     color-scheme: light;
   }

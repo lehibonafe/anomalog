@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
-import { List, useListRef, type RowComponentProps } from "react-window";
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { List, useDynamicRowHeight, useListRef, type RowComponentProps } from "react-window";
 
 import type { LogEvent } from "../../api/types";
 import { useSelectionStore } from "../../state/selectionStore";
+import { getLineSeverity, splitHighlighted, type Finding } from "../../utils/findings";
+import { extractJson } from "../../utils/jsonExtract";
 import { formatTimestamp } from "../../utils/time";
-import { FindingsDashboard, type Finding } from "./FindingsDashboard";
+import { FindingsDashboard } from "./FindingsDashboard";
+import { JsonBlock } from "./JsonView";
 import { LogVolumeChart } from "./LogVolumeChart";
 
 interface RowProps {
@@ -12,6 +15,25 @@ interface RowProps {
   highlightStart: number | null;
   highlightEnd: number | null;
   focusedIndex: number;
+  expandedLines: Set<number>;
+  onToggleExpand: (lineIndex: number) => void;
+}
+
+function HighlightedText({ text }: { text: string }) {
+  const segments = useMemo(() => splitHighlighted(text), [text]);
+  return (
+    <>
+      {segments.map((seg, i) =>
+        seg.severity ? (
+          <mark key={i} className={`log-highlight log-highlight-${seg.severity}`}>
+            {seg.text}
+          </mark>
+        ) : (
+          seg.text
+        )
+      )}
+    </>
+  );
 }
 
 function Row({
@@ -21,6 +43,8 @@ function Row({
   highlightStart,
   highlightEnd,
   focusedIndex,
+  expandedLines,
+  onToggleExpand,
 }: RowComponentProps<RowProps>) {
   const event = events[index];
   const isHighlighted =
@@ -28,24 +52,53 @@ function Row({
     highlightEnd !== null &&
     event.line_index >= highlightStart &&
     event.line_index <= highlightEnd;
+  const isExpanded = expandedLines.has(event.line_index);
+  const severity = useMemo(() => getLineSeverity(event.message), [event.message]);
+  const json = useMemo(() => (isExpanded ? extractJson(event.message) : null), [isExpanded, event.message]);
 
   const classNames = ["log-row"];
   if (index % 2 === 1) classNames.push("odd");
+  if (severity) classNames.push(`log-row-severity-${severity}`);
   if (isHighlighted) classNames.push("highlighted");
   if (index === focusedIndex) classNames.push("focused");
+  if (isExpanded) classNames.push("expanded");
 
   return (
     <div
       style={style}
       className={classNames.join(" ")}
-      title={event.message}
+      title={isExpanded ? undefined : event.message}
       role="row"
       aria-rowindex={index + 1}
       aria-selected={index === focusedIndex}
     >
+      <button
+        type="button"
+        className="log-row-toggle"
+        aria-expanded={isExpanded}
+        aria-label={isExpanded ? "Collapse line" : "Expand line"}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleExpand(event.line_index);
+        }}
+      >
+        <span className="log-row-toggle-icon" aria-hidden="true">
+          ▸
+        </span>
+      </button>
       <span className="log-index">{event.line_index}</span>
       <span className="log-timestamp">{formatTimestamp(event.timestamp)}</span>
-      <span className="log-message">{event.message}</span>
+      <div className="log-message">
+        {json ? (
+          <>
+            {json.prefix && <HighlightedText text={json.prefix} />}
+            <JsonBlock value={json.value} />
+            {json.suffix && <HighlightedText text={json.suffix} />}
+          </>
+        ) : (
+          <HighlightedText text={event.message} />
+        )}
+      </div>
     </div>
   );
 }
@@ -60,6 +113,20 @@ export function LogViewer() {
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [keyword, setKeyword] = useState("");
   const [activeFinding, setActiveFinding] = useState<Finding | null>(null);
+  const [expandedLines, setExpandedLines] = useState<Set<number>>(new Set());
+  const rowHeight = useDynamicRowHeight({ defaultRowHeight: 28 });
+
+  const toggleExpand = useCallback((lineIndex: number) => {
+    setExpandedLines((prev) => {
+      const next = new Set(prev);
+      if (next.has(lineIndex)) {
+        next.delete(lineIndex);
+      } else {
+        next.add(lineIndex);
+      }
+      return next;
+    });
+  }, []);
 
   const filteredEvents = useMemo(() => {
     const term = keyword.trim().toLowerCase();
@@ -89,6 +156,7 @@ export function LogViewer() {
 
   useEffect(() => {
     setActiveFinding(null);
+    setExpandedLines(new Set());
   }, [events]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -168,12 +236,14 @@ export function LogViewer() {
             listRef={listRef}
             rowComponent={Row}
             rowCount={filteredEvents.length}
-            rowHeight={28}
+            rowHeight={rowHeight}
             rowProps={{
               events: filteredEvents,
               highlightStart: highlightedRange?.start ?? null,
               highlightEnd: highlightedRange?.end ?? null,
               focusedIndex,
+              expandedLines,
+              onToggleExpand: toggleExpand,
             }}
             style={{ height: "100%", width: "100%" }}
           />
