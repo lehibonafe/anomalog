@@ -62,6 +62,6 @@ class LLMProvider(ABC):
     async def call_chunk(self, system: str, prompt: str) -> "ChunkResult":
         """Make exactly one upstream call and return a parsed,
         schema-validated ChunkResult. `system` is the static, cacheable
-        system-role prompt (app.services.llm.prompt.SYSTEM_PROMPT); `prompt`
+        system-role prompt (app.services.llm.prompt_v3.SYSTEM_PROMPT); `prompt`
         is the per-request user turn. Raise LLMRateLimited on a rate-limit
         response, LLMRequestError on anything else. No retry logic here."""

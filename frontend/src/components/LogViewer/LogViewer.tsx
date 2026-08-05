@@ -4,6 +4,7 @@ import { List, useListRef, type RowComponentProps } from "react-window";
 import type { LogEvent } from "../../api/types";
 import { useSelectionStore } from "../../state/selectionStore";
 import { formatTimestamp } from "../../utils/time";
+import { FindingsDashboard, type Finding } from "./FindingsDashboard";
 import { LogVolumeChart } from "./LogVolumeChart";
 
 interface RowProps {
@@ -58,12 +59,16 @@ export function LogViewer() {
   const listRef = useListRef(null);
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [keyword, setKeyword] = useState("");
+  const [activeFinding, setActiveFinding] = useState<Finding | null>(null);
 
   const filteredEvents = useMemo(() => {
     const term = keyword.trim().toLowerCase();
-    if (!term) return events;
-    return events.filter((e) => e.message.toLowerCase().includes(term));
-  }, [events, keyword]);
+    return events.filter((e) => {
+      if (term && !e.message.toLowerCase().includes(term)) return false;
+      if (activeFinding && !activeFinding.regex.test(e.message)) return false;
+      return true;
+    });
+  }, [events, keyword, activeFinding]);
 
   useEffect(() => {
     if (highlightedRange && listRef.current) {
@@ -80,7 +85,11 @@ export function LogViewer() {
 
   useEffect(() => {
     setFocusedIndex(0);
-  }, [events, keyword]);
+  }, [events, keyword, activeFinding]);
+
+  useEffect(() => {
+    setActiveFinding(null);
+  }, [events]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (filteredEvents.length === 0) return;
@@ -127,6 +136,11 @@ export function LogViewer() {
           {filteredEvents.length.toLocaleString()} / {events.length.toLocaleString()} lines
         </span>
       </div>
+      <FindingsDashboard
+        events={events}
+        activeFindingId={activeFinding?.id ?? null}
+        onSelectFinding={setActiveFinding}
+      />
       {startTime && endTime && (
         <LogVolumeChart
           events={filteredEvents}

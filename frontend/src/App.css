@@ -98,6 +98,70 @@
   font-variant-numeric: tabular-nums;
 }
 
+.findings-dashboard {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.finding-tile {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-surface-raised);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.finding-tile:hover {
+  border-color: var(--border-color-strong);
+}
+
+.finding-tile .finding-count {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.finding-tile.finding-critical .finding-count {
+  color: var(--severity-critical);
+}
+
+.finding-tile.finding-warning .finding-count {
+  color: var(--severity-warning);
+}
+
+.finding-tile.finding-info .finding-count {
+  color: var(--severity-info);
+}
+
+.finding-tile.active {
+  border-color: transparent;
+}
+
+.finding-tile.finding-critical.active {
+  background-color: var(--severity-critical-bg);
+  border-color: var(--severity-critical);
+  color: var(--text-primary);
+}
+
+.finding-tile.finding-warning.active {
+  background-color: var(--severity-warning-bg);
+  border-color: var(--severity-warning);
+  color: var(--text-primary);
+}
+
+.finding-tile.finding-info.active {
+  background-color: var(--severity-info-bg);
+  border-color: var(--severity-info);
+  color: var(--text-primary);
+}
+
 .log-volume-chart {
   position: relative;
   padding: 0.7rem 1rem 0.5rem;
