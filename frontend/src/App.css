@@ -721,6 +721,16 @@
   font-size: 0.75rem;
 }
 
+.load-more-row {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.load-more-row .hint {
+  margin-bottom: 0.3rem;
+}
+
 .error-text {
   color: var(--severity-critical);
   font-size: 0.8rem;

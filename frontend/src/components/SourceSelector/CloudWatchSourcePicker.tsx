@@ -1,18 +1,35 @@
 import { useState } from "react";
 
+import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { useLogGroups } from "../../hooks/useLogGroups";
 import { useSelectionStore } from "../../state/selectionStore";
 
 export function CloudWatchSourcePicker() {
   const [prefix, setPrefix] = useState("");
-  const { data, isLoading, error } = useLogGroups(prefix);
+  const debouncedPrefix = useDebouncedValue(prefix, 300);
+  const { data, isLoading, error } = useLogGroups(debouncedPrefix);
 
   const logGroupNames = useSelectionStore((s) => s.logGroupNames);
   const setLogGroupNames = useSelectionStore((s) => s.setLogGroupNames);
 
+  const toggleGroup = (name: string) => {
+    if (logGroupNames.includes(name)) {
+      setLogGroupNames(logGroupNames.filter((n) => n !== name));
+    } else {
+      setLogGroupNames([...logGroupNames, name]);
+    }
+  };
+
   return (
     <div className="panel-section">
-      <div className="panel-section-title">CloudWatch log groups</div>
+      <div className="panel-section-title title-with-action">
+        CloudWatch log groups
+        {logGroupNames.length > 0 && (
+          <button type="button" className="link-button" onClick={() => setLogGroupNames([])}>
+            {logGroupNames.length} selected · Clear
+          </button>
+        )}
+      </div>
       <input
         type="text"
         placeholder="Filter by prefix..."
@@ -26,10 +43,9 @@ export function CloudWatchSourcePicker() {
           <li key={group.name}>
             <label>
               <input
-                type="radio"
-                name="log-group"
+                type="checkbox"
                 checked={logGroupNames.includes(group.name)}
-                onChange={() => setLogGroupNames([group.name])}
+                onChange={() => toggleGroup(group.name)}
               />
               {group.name}
             </label>

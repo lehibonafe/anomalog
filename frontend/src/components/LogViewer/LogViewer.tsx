@@ -105,6 +105,7 @@ function Row({
 
 export function LogViewer() {
   const events = useSelectionStore((s) => s.events);
+  const sourceDescription = useSelectionStore((s) => s.sourceDescription);
   const highlightedRange = useSelectionStore((s) => s.highlightedRange);
   const setHighlightedRange = useSelectionStore((s) => s.setHighlightedRange);
   const startTime = useSelectionStore((s) => s.startTime);
@@ -152,12 +153,15 @@ export function LogViewer() {
 
   useEffect(() => {
     setFocusedIndex(0);
-  }, [events, keyword, activeFinding]);
+  }, [sourceDescription, keyword, activeFinding]);
 
+  // sourceDescription (not events) is the "this is a genuinely new search" signal —
+  // appendEvents (Load more) grows `events` without changing it, so pagination
+  // doesn't collapse expanded rows or clear the active finding filter.
   useEffect(() => {
     setActiveFinding(null);
     setExpandedLines(new Set());
-  }, [events]);
+  }, [sourceDescription]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (filteredEvents.length === 0) return;

@@ -33,6 +33,7 @@ interface SelectionState {
   setCloudTrailAttributeKey: (key: CloudTrailLookupAttributeKey | "") => void;
   setCloudTrailAttributeValue: (value: string) => void;
   setEvents: (events: LogEvent[], sourceDescription: string) => void;
+  appendEvents: (events: LogEvent[]) => void;
   setHighlightedRange: (range: HighlightedRange | null) => void;
   setLlmProvider: (provider: LlmProvider) => void;
   setLlmApiKey: (key: string) => void;
@@ -40,7 +41,7 @@ interface SelectionState {
   setLlmBaseUrl: (url: string) => void;
 }
 
-export const useSelectionStore = create<SelectionState>((set) => ({
+export const useSelectionStore = create<SelectionState>((set, get) => ({
   sourceMode: "cloudwatch",
   logGroupNames: [],
   startTime: "",
@@ -64,6 +65,11 @@ export const useSelectionStore = create<SelectionState>((set) => ({
   setCloudTrailAttributeValue: (value) => set({ cloudTrailAttributeValue: value }),
   setEvents: (events, sourceDescription) =>
     set({ events, sourceDescription, highlightedRange: null }),
+  appendEvents: (newEvents) => {
+    const offset = get().events.length;
+    const reindexed = newEvents.map((e) => ({ ...e, line_index: e.line_index + offset }));
+    set((state) => ({ events: [...state.events, ...reindexed] }));
+  },
   setHighlightedRange: (range) => set({ highlightedRange: range }),
   setLlmProvider: (provider) => set({ llmProvider: provider }),
   setLlmApiKey: (key) => set({ llmApiKey: key }),

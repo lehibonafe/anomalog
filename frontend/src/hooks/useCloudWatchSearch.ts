@@ -6,10 +6,15 @@ import { useSelectionStore } from "../state/selectionStore";
 
 export function useCloudWatchSearch() {
   const setEvents = useSelectionStore((s) => s.setEvents);
+  const appendEvents = useSelectionStore((s) => s.appendEvents);
 
   return useMutation({
     mutationFn: (request: CloudWatchSearchRequest) => searchCloudWatchLogs(request),
     onSuccess: (data, variables) => {
+      if (variables.cursor) {
+        appendEvents(data.events);
+        return;
+      }
       const filterPart = variables.filter_pattern
         ? `, filter="${variables.filter_pattern}"`
         : "";

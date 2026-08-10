@@ -1,5 +1,7 @@
 import { isAxiosError } from "axios";
+import { useState } from "react";
 
+import type { CloudWatchSearchRequest } from "../../api/types";
 import { useCloudWatchSearch } from "../../hooks/useCloudWatchSearch";
 import { useSelectionStore } from "../../state/selectionStore";
 import { exceedsMaxTimeRange } from "../../utils/time";
@@ -11,8 +13,12 @@ export function FilterBar() {
   const logGroupNames = useSelectionStore((s) => s.logGroupNames);
   const startTime = useSelectionStore((s) => s.startTime);
   const endTime = useSelectionStore((s) => s.endTime);
+  const loadedCount = useSelectionStore((s) => s.events.length);
 
   const search = useCloudWatchSearch();
+  // Snapshot of the request that produced the current cursor, so "Load more"
+  // keeps paging the same query even if the sidebar inputs change afterward.
+  const [lastRequest, setLastRequest] = useState<CloudWatchSearchRequest | null>(null);
 
   if (sourceMode !== "cloudwatch") {
     return null;
@@ -20,6 +26,23 @@ export function FilterBar() {
 
   const rangeTooLong = exceedsMaxTimeRange(startTime, endTime);
   const canSearch = logGroupNames.length > 0 && !!startTime && !!endTime && !rangeTooLong;
+
+  const runSearch = () => {
+    const request: CloudWatchSearchRequest = {
+      log_group_names: logGroupNames,
+      start_time: startTime,
+      end_time: endTime,
+      filter_pattern: filterPattern || null,
+    };
+    setLastRequest(request);
+    search.reset(); // drop any stale truncated/cursor state from a previous query
+    search.mutate(request);
+  };
+
+  const loadMore = () => {
+    if (!lastRequest || !search.data?.cursor) return;
+    search.mutate({ ...lastRequest, cursor: search.data.cursor });
+  };
 
   return (
     <div className="panel-section">
@@ -34,14 +57,7 @@ export function FilterBar() {
         type="button"
         className="btn-primary btn-block"
         disabled={!canSearch || search.isPending}
-        onClick={() =>
-          search.mutate({
-            log_group_names: logGroupNames,
-            start_time: startTime,
-            end_time: endTime,
-            filter_pattern: filterPattern || null,
-          })
-        }
+        onClick={runSearch}
       >
         {search.isPending && <span className="spinner" />}
         {search.isPending ? "Searching..." : "Search logs"}
@@ -52,6 +68,22 @@ export function FilterBar() {
             ? search.error.response?.data?.detail
             : "Search failed. Check the backend logs."}
         </p>
+      )}
+      {search.data?.truncated && (
+        <div className="load-more-row">
+          <p className="hint">
+            Showing {loadedCount.toLocaleString()} lines — more match this query.
+          </p>
+          <button
+            type="button"
+            className="btn-block"
+            disabled={search.isPending}
+            onClick={loadMore}
+          >
+            {search.isPending && <span className="spinner dark" />}
+            {search.isPending ? "Loading..." : "Load more"}
+          </button>
+        </div>
       )}
     </div>
   );
