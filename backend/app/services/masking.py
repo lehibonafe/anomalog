@@ -23,18 +23,79 @@ _JWT_RE = re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b")
 _BEARER_RE = re.compile(r"(?i)\b(Bearer)\s+[A-Za-z0-9\-\._~+/]+=*")
 _BASIC_AUTH_RE = re.compile(r"(?i)\b(Basic)\s+[A-Za-z0-9+/]+=*")
 
+# Provider tokens with stable, recognizable prefixes. More ambiguous credentials
+# are covered by the contextual key/value matcher below.
+_PROVIDER_TOKEN_RE = re.compile(
+    r"\b(?:"
+    r"gh[pousr]_[A-Za-z0-9]{20,}|"  # GitHub
+    r"github_pat_[A-Za-z0-9_]{20,}|"
+    r"xox[baprs]-[A-Za-z0-9-]{10,}|"  # Slack
+    r"sk_(?:live|test)_[A-Za-z0-9]{16,}|"  # Stripe
+    r"AIza[0-9A-Za-z_-]{35}"  # Google API key
+    r")\b"
+)
+
+_PEM_PRIVATE_KEY_RE = re.compile(
+    r"-----BEGIN(?: [A-Z0-9]+)? PRIVATE KEY-----.*?"
+    r"-----END(?: [A-Z0-9]+)? PRIVATE KEY-----",
+    re.DOTALL,
+)
+
+# Masks only the user-info portion; the scheme, host, and database name remain
+# useful for diagnosis.
+_DATABASE_URL_RE = re.compile(
+    r"(?i)\b((?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|redis|"
+    r"rediss|amqp|amqps)://[^\s:/@]+:)[^\s@/]+(@)"
+)
+
 _SECRET_KEY_VALUE_RE = re.compile(
     r"(?i)(['\"]?\b(?:password|passwd|pwd|secret|api[_-]?key|access[_-]?key(?:[_-]?id)?|"
     r"secret[_-]?access[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|"
-    r"private[_-]?key|session[_-]?token)\b['\"]?)"
+    r"private[_-]?key|session[_-]?token|cookie|set[_-]?cookie|session[_-]?id|"
+    r"csrf(?:[_-]?token)?|otp|one[_-]?time[_-]?(?:password|code)|authorization[_-]?code|"
+    r"refresh[_-]?token|connection[_-]?(?:string|url)|database[_-]?url|db[_-]?url|"
+    r"github[_-]?token|slack[_-]?token|stripe[_-]?(?:key|token)|google[_-]?api[_-]?key|"
+    r"full[_-]?name|first[_-]?name|last[_-]?name|user[_-]?name|username|employee[_-]?id|"
+    r"customer[_-]?id|patient[_-]?id|member[_-]?id|date[_-]?of[_-]?birth|dob|age|"
+    r"address|street|postal[_-]?code|zip(?:[_-]?code)?|passport(?:[_-]?number)?|"
+    r"driver(?:'s)?[_-]?licen[cs]e|tax[_-]?id|national[_-]?id|bank[_-]?account|"
+    r"account[_-]?number|routing[_-]?number|iban|insurance[_-]?id|diagnosis|"
+    r"medical[_-]?(?:record|condition)|latitude|longitude|coordinates|location|"
+    r"device[_-]?id|imei|aws[_-]?account[_-]?id|principal[_-]?arn)\b['\"]?)"
     r"(\s*[:=]\s*)"
-    r"(\"[^\"]*\"|'[^']*'|[^\s,;}]+)"
+    r"(\"[^\"]*\"|'[^']*'|[^\s,;}&]+)"
 )
 
 _EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 _SSN_RE = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
 _PHONE_RE = re.compile(r"\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b")
 _CARD_CANDIDATE_RE = re.compile(r"\b(?:\d[ -]?){12,18}\d\b")
+_IPV4_RE = re.compile(
+    r"(?<![\w.])(?:25[0-5]|2[0-4]\d|1?\d?\d)"
+    r"(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}(?![\w.])"
+)
+_IPV6_RE = re.compile(
+    r"(?<![0-9A-Fa-f:])(?:"
+    r"(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|"
+    r"(?:[0-9A-Fa-f]{1,4}:){1,7}:|"
+    r"(?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}|"
+    r"(?:[0-9A-Fa-f]{1,4}:){1,5}(?::[0-9A-Fa-f]{1,4}){1,2}|"
+    r"(?:[0-9A-Fa-f]{1,4}:){1,4}(?::[0-9A-Fa-f]{1,4}){1,3}|"
+    r"(?:[0-9A-Fa-f]{1,4}:){1,3}(?::[0-9A-Fa-f]{1,4}){1,4}|"
+    r"(?:[0-9A-Fa-f]{1,4}:){1,2}(?::[0-9A-Fa-f]{1,4}){1,5}|"
+    r"[0-9A-Fa-f]{1,4}:(?:(?::[0-9A-Fa-f]{1,4}){1,6})|"
+    r":(?:(?::[0-9A-Fa-f]{1,4}){1,7}|:)"
+    r")(?![0-9A-Fa-f:])"
+)
+_MAC_RE = re.compile(r"(?i)(?<![0-9a-f])(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}(?![0-9a-f])")
+_IBAN_RE = re.compile(r"\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]){11,30}\b", re.IGNORECASE)
+_AWS_ACCOUNT_ID_RE = re.compile(r"(?i)(\b(?:aws[_-]?account[_-]?id|account)\s*[:=]\s*)\d{12}\b")
+_ARN_ACCOUNT_RE = re.compile(r"(\barn:aws(?:-[a-z]+)?:[^:\s]*:[^:\s]*:)\d{12}(:)")
+_SENSITIVE_QUERY_PARAM_RE = re.compile(
+    r"(?i)([?&](?:access[_-]?token|auth[_-]?token|authorization[_-]?code|code|"
+    r"id[_-]?token|refresh[_-]?token|session[_-]?id|api[_-]?key|key|password|"
+    r"secret|signature|sig|token)=)[^&#\s]*"
+)
 
 
 def _luhn_valid(digits: str) -> bool:
@@ -57,7 +118,12 @@ def _mask_card_candidate(m: re.Match) -> str:
 
 
 def mask_message(text: str) -> str:
+    text = _PEM_PRIVATE_KEY_RE.sub(MASK, text)
+    text = _DATABASE_URL_RE.sub(lambda m: f"{m.group(1)}{MASK}{m.group(2)}", text)
+    text = _SENSITIVE_QUERY_PARAM_RE.sub(lambda m: f"{m.group(1)}{MASK}", text)
+    text = _IBAN_RE.sub(MASK, text)
     text = _AWS_ACCESS_KEY_RE.sub(MASK, text)
+    text = _PROVIDER_TOKEN_RE.sub(MASK, text)
     text = _JWT_RE.sub(MASK, text)
     text = _BEARER_RE.sub(lambda m: f"{m.group(1)} {MASK}", text)
     text = _BASIC_AUTH_RE.sub(lambda m: f"{m.group(1)} {MASK}", text)
@@ -66,6 +132,11 @@ def mask_message(text: str) -> str:
     text = _SSN_RE.sub(MASK, text)
     text = _CARD_CANDIDATE_RE.sub(_mask_card_candidate, text)
     text = _PHONE_RE.sub(MASK, text)
+    text = _IPV4_RE.sub(MASK, text)
+    text = _IPV6_RE.sub(MASK, text)
+    text = _MAC_RE.sub(MASK, text)
+    text = _AWS_ACCOUNT_ID_RE.sub(lambda m: f"{m.group(1)}{MASK}", text)
+    text = _ARN_ACCOUNT_RE.sub(lambda m: f"{m.group(1)}{MASK}{m.group(2)}", text)
     return text
 
 

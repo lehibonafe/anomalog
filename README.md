@@ -1,4 +1,4 @@
-# TraceMind
+# CloudCortex
 
 Local web app for investigating AWS CloudWatch Logs and CloudTrail events: pick
 a source (log groups, or CloudTrail lookup attributes) and a time range,

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy TraceMind on a remote host (e.g. EC2) with docker compose.
+# Deploy CloudCortex on a remote host (e.g. EC2) with docker compose.
 #
 # What it does, in order:
 #   1. Detects the host's public address (EC2 IMDSv2 first, then checkip),
