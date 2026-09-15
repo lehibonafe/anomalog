@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,7 +11,7 @@ class Settings(BaseSettings):
 
     # LiteLLM (default provider — team's internal proxy)
     litellm_api_key: str
-    litellm_model: str = "qwen3:4b"
+    litellm_model: str = "qwen3.8-flash"
     litellm_base_url: str = "http://llm.etapinc.com/v1"
 
     # Gemini (opt-in; no longer the server-configured default)
@@ -28,6 +29,12 @@ class Settings(BaseSettings):
     masking_service_timeout_s: float = 5.0
     masking_service_verify_ssl: bool = False  # pii.etapinc.com has a self-signed cert today; set True once a trusted cert is issued
     masking_service_batch_size: int = 200
+
+    # CloudWatch Logs Live Tail safety and cost controls
+    live_tail_max_concurrent_sessions: int = Field(default=3, ge=1)
+    live_tail_inactivity_timeout_seconds: int = Field(default=900, ge=900, le=1800)
+    live_tail_cost_per_minute_usd: float = Field(default=0.01, ge=0)
+    live_tail_free_tier_minutes: int = Field(default=1800, ge=0)
 
     # Log volume caps
     max_time_range_days: int = 7

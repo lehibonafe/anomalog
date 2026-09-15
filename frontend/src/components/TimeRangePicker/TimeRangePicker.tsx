@@ -2,10 +2,13 @@ import { useState } from "react";
 
 import { useSelectionStore } from "../../state/selectionStore";
 import {
+  DISPLAY_TIME_ZONE_LABEL,
   exceedsMaxTimeRange,
+  fromSingaporeInput,
   MAX_TIME_RANGE_DAYS,
   presetToRange,
   TIME_PRESETS,
+  toSingaporeInput,
   type TimePreset,
 } from "../../utils/time";
 
@@ -16,9 +19,9 @@ export function TimeRangePicker() {
   const [activePreset, setActivePreset] = useState<TimePreset | null>(null);
   const rangeTooLong = exceedsMaxTimeRange(startTime, endTime);
 
-  const nowLocal = toLocalInput(new Date().toISOString());
-  const startLocal = toLocalInput(startTime);
-  const endLocal = toLocalInput(endTime);
+  const nowLocal = toSingaporeInput(new Date().toISOString());
+  const startLocal = toSingaporeInput(startTime);
+  const endLocal = toSingaporeInput(endTime);
   // datetime-local values are zero-padded "YYYY-MM-DDTHH:mm", so string
   // comparison sorts the same as chronological order.
   const startMax = endLocal && endLocal < nowLocal ? endLocal : nowLocal;
@@ -39,7 +42,7 @@ export function TimeRangePicker() {
   return (
     <div className="panel-section">
       <div className="panel-section-title title-with-action">
-        Time range
+        Time range ({DISPLAY_TIME_ZONE_LABEL})
         {(startTime || endTime) && (
           <button type="button" className="link-button" onClick={clearRange}>
             Clear
@@ -67,7 +70,7 @@ export function TimeRangePicker() {
             max={startMax}
             onChange={(e) => {
               const value = e.target.value > startMax ? startMax : e.target.value;
-              setTimeRange(fromLocalInput(value), endTime);
+              setTimeRange(fromSingaporeInput(value), endTime);
               setActivePreset(null);
             }}
           />
@@ -83,7 +86,7 @@ export function TimeRangePicker() {
               let value = e.target.value;
               if (endMin && value < endMin) value = endMin;
               if (value > endMax) value = endMax;
-              setTimeRange(startTime, fromLocalInput(value));
+              setTimeRange(startTime, fromSingaporeInput(value));
               setActivePreset(null);
             }}
           />
@@ -97,17 +100,4 @@ export function TimeRangePicker() {
       )}
     </div>
   );
-}
-
-function toLocalInput(iso: string): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const offset = d.getTimezoneOffset();
-  const local = new Date(d.getTime() - offset * 60000);
-  return local.toISOString().slice(0, 16);
-}
-
-function fromLocalInput(value: string): string {
-  if (!value) return "";
-  return new Date(value).toISOString();
 }

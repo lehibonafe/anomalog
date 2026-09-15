@@ -39,4 +39,8 @@ def config(settings: Settings = Depends(get_settings)):
         "gemini_model": settings.gemini_model,
         "max_log_search_lines": settings.max_log_search_lines,
         "max_analysis_lines": settings.max_analysis_lines,
+        "live_tail_max_concurrent_sessions": settings.live_tail_max_concurrent_sessions,
+        "live_tail_inactivity_timeout_seconds": settings.live_tail_inactivity_timeout_seconds,
+        "live_tail_cost_per_minute_usd": settings.live_tail_cost_per_minute_usd,
+        "live_tail_free_tier_minutes": settings.live_tail_free_tier_minutes,
     }

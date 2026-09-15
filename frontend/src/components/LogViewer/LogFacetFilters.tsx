@@ -33,7 +33,6 @@ export function LogFacetFilters({ events, selection, onChange }: LogFacetFilters
     return result
   }, [events])
 
-  const selectedCount = Object.values(selection).reduce((sum, values) => sum + values.length, 0)
   const toggle = (key: LogFacetKey, value: string) => {
     const values = selection[key]
     onChange({ ...selection, [key]: values.includes(value) ? values.filter((item) => item !== value) : [...values, value] })
@@ -41,10 +40,6 @@ export function LogFacetFilters({ events, selection, onChange }: LogFacetFilters
 
   return (
     <section className="log-facets" aria-label="Log facets">
-      <div className="log-facets-header">
-        <div className="log-facets-title">Facets {selectedCount > 0 && <strong>{selectedCount}</strong>}<span>Selected facet values color the volume chart</span></div>
-        {selectedCount > 0 && <button type="button" className="log-facets-clear" onClick={() => onChange({ level: [], method: [], route: [], status: [], exception: [], duration: [] })}>Clear all</button>}
-      </div>
       <div className="log-facet-grid">
         {FACET_DEFS.map(({ key, label, limit }) => {
           const values = [...counts[key]].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, limit)

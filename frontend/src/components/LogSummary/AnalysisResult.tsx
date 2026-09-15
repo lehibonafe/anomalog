@@ -2,7 +2,9 @@ import { Fragment, type ReactNode } from "react";
 
 import { useSelectionStore } from "../../state/selectionStore";
 
-const LINE_REF = /\[(\d+)(?:-(\d+))?\]/g;
+// Accept individual lines, ranges, and comma-separated references emitted by
+// different models: [399], [399-401], and [399, 401].
+const LINE_REF = /\[\s*(\d+(?:\s*[-–—]\s*\d+)?(?:\s*,\s*\d+(?:\s*[-–—]\s*\d+)?)*)\s*\]/g;
 // Bold must be tried before italic so `**x**` isn't consumed as `*` + `*x*` + `*`.
 const INLINE_MD = /\*\*(?<bold>[^*]+?)\*\*|`(?<code>[^`]+?)`|\*(?<italic>[^*]+?)\*/g;
 
@@ -35,6 +37,18 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
 export function AnalysisResult({ text, className }: { text: string; className?: string }) {
   const setHighlightedRange = useSelectionStore((s) => s.setHighlightedRange);
 
+  function showEvidence(ranges: Array<{ start: number; end: number }>) {
+    const start = Math.min(...ranges.map((range) => range.start));
+    const end = Math.max(...ranges.map((range) => range.end));
+    setHighlightedRange({ start, end, ranges });
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>('.raw-logs-section')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    });
+  }
+
   const parts: ReactNode[] = [];
   let lastIndex = 0;
   let key = 0;
@@ -46,17 +60,35 @@ export function AnalysisResult({ text, className }: { text: string; className?: 
       const segKey = key++;
       parts.push(<Fragment key={segKey}>{renderInline(text.slice(lastIndex, index), `seg-${segKey}`)}</Fragment>);
     }
-    const start = Number(match[1]);
-    const end = match[2] ? Number(match[2]) : start;
+    const references = match[1].split(',').map((reference) => {
+      const bounds = [...reference.matchAll(/\d+/g)].map((value) => Number(value[0]));
+      const first = bounds[0];
+      const last = bounds[bounds.length - 1] ?? first;
+      return {
+        label: reference.trim(),
+        range: { start: Math.min(first, last), end: Math.max(first, last) },
+      };
+    });
     parts.push(
-      <button
-        key={key++}
-        type="button"
-        className="line-ref"
-        onClick={() => setHighlightedRange({ start, end })}
-      >
-        {match[0]}
-      </button>
+      <span key={key++} className="line-ref-group">
+        [
+        {references.map(({ label, range }, referenceIndex) => (
+          <Fragment key={`${label}-${referenceIndex}`}>
+            {referenceIndex > 0 && ', '}
+            <button
+              type="button"
+              className="line-ref"
+              aria-label={range.start === range.end
+                ? `Show referenced log ${range.start}`
+                : `Show referenced logs ${range.start} through ${range.end}`}
+              onClick={() => showEvidence([range])}
+            >
+              {label}
+            </button>
+          </Fragment>
+        ))}
+        ]
+      </span>
     );
     lastIndex = index + match[0].length;
   }

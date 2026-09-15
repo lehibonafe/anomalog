@@ -15,7 +15,7 @@ from app.core.rate_limiter import InboundRateLimiter
 settings = get_settings()
 inbound_rate_limiter = InboundRateLimiter(settings.inbound_rate_limit_per_minute)
 
-app = FastAPI(title="CloudCortex")
+app = FastAPI(title="Anomalog")
 
 app.add_middleware(
     CORSMiddleware,

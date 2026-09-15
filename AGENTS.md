@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-CloudCortex has two independently developed services. `backend/app/` contains the FastAPI application: routes live in `api/`, request and response models in `schemas/`, AWS and rate-limit helpers in `core/`, and business logic plus LLM adapters in `services/`. Backend tests mirror these areas under `backend/tests/`. `frontend/src/` contains the React/TypeScript UI, organized into `components/`, `hooks/`, `api/`, `state/`, `utils/`, and `assets/`. Root scripts and `docker-compose.yml` coordinate both services.
+Anomalog has two independently developed services. `backend/app/` contains the FastAPI application: routes live in `api/`, request and response models in `schemas/`, AWS and rate-limit helpers in `core/`, and business logic plus LLM adapters in `services/`. Backend tests mirror these areas under `backend/tests/`. `frontend/src/` contains the React/TypeScript UI, organized into `components/`, `hooks/`, `api/`, `state/`, `utils/`, and `assets/`. Root scripts and `docker-compose.yml` coordinate both services.
 
 ## Build, Test, and Development Commands
 

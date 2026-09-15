@@ -145,3 +145,51 @@ def test_search_log_events_builds_cursor_when_more_pages_exist(mock_get_client):
     assert result.cursor is not None
     decoded = cloudwatch_service._decode_cursor(result.cursor)
     assert decoded == {"group-a": "token-1"}
+
+
+@patch("app.services.cloudwatch_service.get_logs_client")
+def test_pagination_preserves_events_and_unvisited_groups(mock_get_client):
+    data = {name: [f"{name}-{i}" for i in range(4)] for name in ("a", "b", "c")}
+
+    def fetch(logGroupName, limit, nextToken="0", **kwargs):
+        start = int(nextToken)
+        messages = data[logGroupName][start:start + limit]
+        response = {"events": [{"message": message, "timestamp": 1000} for message in messages]}
+        if start + len(messages) < len(data[logGroupName]):
+            response["nextToken"] = str(start + len(messages))
+        return response
+
+    mock_get_client.return_value.filter_log_events.side_effect = fetch
+    cursor = None
+    messages = []
+    for _ in range(10):
+        result = cloudwatch_service.search_log_events(
+            ["a", "b", "c"], datetime(2026, 1, 1, tzinfo=timezone.utc),
+            datetime(2026, 1, 2, tzinfo=timezone.utc), None, 3, cursor, make_settings(),
+        )
+        assert len(result.events) <= 3
+        messages.extend(event.message for event in result.events)
+        cursor = result.cursor
+        if cursor is None:
+            break
+    assert cursor is None
+    assert sorted(messages) == sorted(message for group in data.values() for message in group)
+
+
+@patch("app.services.cloudwatch_service.get_logs_client")
+def test_empty_page_preserves_continuation(mock_get_client):
+    mock_get_client.return_value.filter_log_events.side_effect = [
+        {"events": [], "nextToken": "continue"},
+        {"events": [{"message": "later event", "timestamp": 1000}]},
+    ]
+    args = dict(
+        log_group_names=["a"], start_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        end_time=datetime(2026, 1, 2, tzinfo=timezone.utc), filter_pattern=None,
+        limit=1, settings=make_settings(),
+    )
+    first = cloudwatch_service.search_log_events(**args, cursor=None)
+    assert first.events == []
+    assert first.cursor is not None
+    second = cloudwatch_service.search_log_events(**args, cursor=first.cursor)
+    assert [event.message for event in second.events] == ["later event"]
+    assert second.cursor is None

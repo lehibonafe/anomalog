@@ -2,6 +2,7 @@ import { apiClient } from "./client";
 import type {
   CloudWatchSearchRequest,
   CloudWatchSearchResponse,
+  LiveTailConfig,
   LogGroupsResponse,
 } from "./types";
 
@@ -19,5 +20,18 @@ export async function searchCloudWatchLogs(
     "/api/cloudwatch/logs/search",
     request
   );
+  return data;
+}
+
+export function cloudWatchLiveTailUrl(): string {
+  const configuredBase = apiClient.defaults.baseURL ?? window.location.origin;
+  const apiBase = new URL(configuredBase, window.location.origin);
+  const url = new URL("/api/cloudwatch/logs/live-tail", apiBase);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  return url.toString();
+}
+
+export async function fetchLiveTailConfig(): Promise<LiveTailConfig> {
+  const { data } = await apiClient.get<LiveTailConfig>("/api/config");
   return data;
 }

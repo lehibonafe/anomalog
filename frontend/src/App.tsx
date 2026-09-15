@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 
-import { ChatWidget } from './components/ChatWidget/ChatWidget'
 import { CloudTrailSearchBar } from './components/FilterBar/CloudTrailSearchBar'
 import { FilterBar } from './components/FilterBar/FilterBar'
+import { LogSummary } from './components/LogSummary/LogSummary'
+import { ModelSettingsControl } from './components/LogSummary/ModelSettingsControl'
 import { LogViewer } from './components/LogViewer/LogViewer'
 import { AnalyticsDashboard } from './components/LogViewer/AnalyticsDashboard'
 import { SourceSelector } from './components/SourceSelector/SourceSelector'
@@ -17,16 +18,19 @@ function App() {
   const sourceDescription = useSelectionStore((s) => s.sourceDescription)
   const [activeFinding, setActiveFinding] = useState<Finding | null>(null)
   const [facetSelection, setFacetSelection] = useState<LogFacetSelection>(EMPTY_LOG_FACETS)
+  const [visibleEvents, setVisibleEvents] = useState<typeof events>([])
 
   useEffect(() => {
     setFacetSelection(EMPTY_LOG_FACETS)
+    setVisibleEvents([])
   }, [sourceDescription])
 
   return (
     <div className="app-layout">
       <header className="app-header">
         <span className="logo-dot" />
-        <h1>CloudCortex</h1>
+        <h1>Anomalog</h1>
+        <ModelSettingsControl />
       </header>
       <div className="app-body">
         <aside className="sidebar">
@@ -36,10 +40,7 @@ function App() {
           <CloudTrailSearchBar />
         </aside>
         <main className="main-content">
-          <div className="log-viewer-header">
-            <span className="source-label">{sourceDescription || 'No logs loaded'}</span>
-            <span className="hint">{events.length} lines</span>
-          </div>
+          <LogSummary events={visibleEvents} />
           <AnalyticsDashboard
             events={events}
             activeFindingId={activeFinding?.id ?? null}
@@ -54,11 +55,11 @@ function App() {
               onSelectFinding={setActiveFinding}
               facetSelection={facetSelection}
               onFacetChange={setFacetSelection}
+              onVisibleEventsChange={setVisibleEvents}
             />
           </section>
         </main>
       </div>
-      <ChatWidget />
     </div>
   )
 }

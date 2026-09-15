@@ -72,6 +72,9 @@ def search_log_events(
             "the range)."
         )
 
+    if limit < 1:
+        raise BadRequestError("Limit must be at least 1.")
+
     client = get_logs_client()
     start_ms = int(start_time.timestamp() * 1000)
     end_ms = int(end_time.timestamp() * 1000)
@@ -82,16 +85,21 @@ def search_log_events(
         active_groups = list(tokens.keys())
     else:
         tokens = {}
-        active_groups = log_group_names
+        active_groups = list(dict.fromkeys(log_group_names))
 
     raw_entries: list[tuple[str, str, datetime | None, str]] = []
     next_tokens: dict[str, str] = {}
     for name in active_groups:
+        remaining = effective_limit - len(raw_entries)
+        if remaining <= 0:
+            # Empty token means this group has not been fetched yet.
+            next_tokens[name] = tokens.get(name, "")
+            continue
         kwargs: dict = {
             "logGroupName": name,
             "startTime": start_ms,
             "endTime": end_ms,
-            "limit": min(effective_limit, 1000) or 1000,
+            "limit": min(remaining, 1000),
         }
         if filter_pattern:
             kwargs["filterPattern"] = filter_pattern
@@ -126,14 +134,12 @@ def search_log_events(
     ]
 
     all_events.sort(key=lambda ev: ev.timestamp or datetime.min.replace(tzinfo=timezone.utc))
-    truncated = len(all_events) > effective_limit
-    all_events = all_events[:effective_limit]
     for i, ev in enumerate(all_events):
         ev.line_index = i
 
     return CloudWatchSearchResponse(
         events=all_events,
         cursor=_encode_cursor(next_tokens),
-        truncated=truncated,
+        truncated=False,
         total_returned=len(all_events),
     )

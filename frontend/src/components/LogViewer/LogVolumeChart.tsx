@@ -1,9 +1,9 @@
-import { format } from 'date-fns'
 import { useMemo, useState } from 'react'
 
 import type { LogEvent } from '../../api/types'
 import { facetColor } from '../../utils/facetColors'
 import { extractLogFacets, type LogFacetKey, type LogFacetSelection } from '../../utils/logFacets'
+import { DISPLAY_TIME_ZONE_LABEL, formatSingaporeDateTime, formatSingaporeTime } from '../../utils/time'
 
 const BUCKET_COUNT = 96
 const CHART_HEIGHT = 48
@@ -48,7 +48,7 @@ function buildBuckets(events: LogEvent[], rangeStart: Date, rangeEnd: Date, colo
 }
 
 function bucketLabel(start: Date, end: Date) {
-  return `${format(start, 'MMM d, HH:mm')} – ${format(end, 'HH:mm')}`
+  return `${formatSingaporeDateTime(start)} – ${formatSingaporeTime(end)} ${DISPLAY_TIME_ZONE_LABEL}`
 }
 
 interface LogVolumeChartProps {
@@ -133,7 +133,7 @@ export function LogVolumeChart({ events, rangeStart, rangeEnd, facetSelection, o
           )
         })}
       </div>
-      <div className="log-volume-axis"><span>{format(range.start, 'MMM d, HH:mm')}</span><span>{format(range.end, 'MMM d, HH:mm')}</span></div>
+      <div className="log-volume-axis"><span>{formatSingaporeDateTime(range.start)} {DISPLAY_TIME_ZONE_LABEL}</span><span>{formatSingaporeDateTime(range.end)} {DISPLAY_TIME_ZONE_LABEL}</span></div>
     </div>
   )
 }

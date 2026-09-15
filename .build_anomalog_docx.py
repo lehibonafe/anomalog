@@ -9,8 +9,8 @@ from xml.etree import ElementTree as ET
 
 
 ROOT = Path(__file__).resolve().parent
-DOCX = ROOT / "TraceMind_Documentation.docx"
-TMP = ROOT / ".TraceMind_Documentation.docx.tmp"
+DOCX = ROOT / "Anomalog_Documentation.docx"
+TMP = ROOT / ".Anomalog_Documentation.docx.tmp"
 
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -191,7 +191,7 @@ def toc_field() -> None:
 
 
 # Cover
-p = paragraph("CloudCortex", style="Title", align="center", before=1600, after=120)
+p = paragraph("Anomalog", style="Title", align="center", before=1600, after=120)
 run(p, "")
 p = paragraph("AWS Log Investigation and LLM-Assisted APM", style="Subtitle", align="center", after=220)
 p = paragraph("Technical, Operations, API, and User Documentation", align="center", after=500)
@@ -199,14 +199,14 @@ run(p, "", size=24)
 rich([("Version 2.0", {"bold": True, "color": "1F4E79"})], align="center", after=60)
 paragraph("Updated 18 August 2026", align="center", after=60)
 paragraph("Covers the current repository working tree", align="center", after=800)
-note("Naming", "The application and API identify the product as CloudCortex. The Word file retains its legacy name, TraceMind_Documentation.docx, for continuity.", "EAF2F8")
+note("Naming", "The application, API, and Word documentation consistently identify the product as Anomalog.", "EAF2F8")
 page_break()
 
 heading("Document Control", 1)
 table(
     ["Item", "Value"],
     [
-        ["Product", "CloudCortex"],
+        ["Product", "Anomalog"],
         ["Document", "Technical, operations, API, and user guide"],
         ["Version / date", "2.0 / 18 August 2026"],
         ["Implementation baseline", "Current repository working tree, including the in-progress analytics dashboard and facet-filtering UI"],
@@ -229,7 +229,7 @@ for item in [
 page_break()
 
 heading("1. Product Overview", 1)
-paragraph("CloudCortex is a local, browser-based investigation workspace for AWS CloudWatch Logs and CloudTrail event history. It combines bounded AWS search, privacy-first masking, an interactive analytics dashboard, a virtualized raw-log viewer, and conversational LLM analysis. The application has no database and does not persist investigations on the backend.")
+paragraph("Anomalog is a local, browser-based investigation workspace for AWS CloudWatch Logs and CloudTrail event history. It combines bounded AWS search, privacy-first masking, an interactive analytics dashboard, a virtualized raw-log viewer, and conversational LLM analysis. The application has no database and does not persist investigations on the backend.")
 heading("1.1 Complete Capability Summary", 2)
 table(
     ["Area", "Implemented capabilities"],
@@ -249,7 +249,7 @@ heading("1.2 Intended Use", 2)
 bullet("Investigate errors, latency clues, retries, dependency failures, access denials, and AWS changes in a selected time window.")
 bullet("Correlate application symptoms with CloudTrail activity while keeping audit/security observations separate when no causal evidence exists.")
 bullet("Use LLM output as an evidence-linked investigation aid, not as an autonomous remediation system.")
-note("Scope", "CloudCortex is local-only and single-user by design. It has no application login, tenant isolation, durable case storage, alerting engine, or automatic action execution.")
+note("Scope", "Anomalog is local-only and single-user by design. It has no application login, tenant isolation, durable case storage, alerting engine, or automatic action execution.")
 
 heading("2. Architecture and Data Flow", 1)
 code("Browser :5173 (React + TypeScript + Vite)\n    |  Axios JSON over HTTP\n    v\nFastAPI :8000\n    |-- boto3 --> CloudWatch Logs / CloudTrail\n    |-- httpx --> optional external PII masking service\n    `-- provider SDKs --> LiteLLM / Gemini / OpenAI / Anthropic / Ollama")
@@ -332,7 +332,7 @@ table(
 heading("4.6 Embedded JSON", 2)
 paragraph("The parser first tries the complete trimmed message. If that fails, it scans balanced object/array spans while respecting JSON strings and escape sequences. Only objects and arrays are rendered as structured JSON; scalar values remain plain log text.")
 heading("4.7 Export", 2)
-paragraph("Exports are produced entirely in the browser from the filtered array. JSON preserves LogEvent fields; CSV includes line_index, timestamp, source, origin, stream_or_key, and message; text uses [timestamp] [origin/stream_or_key] message. Files are named cloudcortex-logs-<ISO timestamp>.<format>.")
+paragraph("Exports are produced entirely in the browser from the filtered array. JSON preserves LogEvent fields; CSV includes line_index, timestamp, source, origin, stream_or_key, and message; text uses [timestamp] [origin/stream_or_key] message. Files are named anomalog-logs-<ISO timestamp>.<format>.")
 
 heading("5. Backend API Reference", 1)
 paragraph("Default base URL: http://localhost:8000. All application endpoints are under /api and use JSON. FastAPI also exposes its generated OpenAPI interface at /docs unless deployment configuration disables it externally.")
@@ -403,7 +403,7 @@ paragraph("Matches become ***MASKED***. Database URLs preserve scheme, user, hos
 heading("7.3 Security Boundary", 2)
 bullet("The application has no authentication or authorization. Restrict 5173 and 8000 at the security group, firewall, VPN, or authenticated reverse proxy.")
 bullet("CORS limits browser origins but is not authentication. Keep CORS_ORIGINS aligned with the exact URL used to open the frontend.")
-bullet("Provider API keys entered in the UI live in in-memory Zustand state, are sent to the backend for that request, and are not deliberately persisted by CloudCortex. Browser/device security still matters.")
+bullet("Provider API keys entered in the UI live in in-memory Zustand state, are sent to the backend for that request, and are not deliberately persisted by Anomalog. Browser/device security still matters.")
 bullet("The inbound limiter is an abuse guard only. It is process-local, fixed-window, and keyed by request.client.host; proxies must preserve the intended client identity through trusted configuration outside this app.")
 bullet("MASKING_SERVICE_VERIFY_SSL defaults to false because the configured service currently uses a self-signed certificate. This exposes masking traffic to man-in-the-middle risk; enable verification as soon as a trusted certificate is available.")
 
@@ -632,11 +632,11 @@ def update_settings(raw: bytes) -> bytes:
 def update_core(raw: bytes) -> bytes:
     root = ET.fromstring(raw)
     values = {
-        qn(DC, "title"): "CloudCortex Technical, Operations, API, and User Documentation",
+        qn(DC, "title"): "Anomalog Technical, Operations, API, and User Documentation",
         qn(DC, "subject"): "AWS log investigation and LLM-assisted APM",
-        qn(DC, "creator"): "CloudCortex project",
-        qn(CP, "keywords"): "CloudCortex, CloudWatch, CloudTrail, FastAPI, React, LLM, masking, APM",
-        qn(CP, "lastModifiedBy"): "CloudCortex project",
+        qn(DC, "creator"): "Anomalog project",
+        qn(CP, "keywords"): "Anomalog, CloudWatch, CloudTrail, FastAPI, React, LLM, masking, APM",
+        qn(CP, "lastModifiedBy"): "Anomalog project",
     }
     for tag, value in values.items():
         node = root.find(tag)

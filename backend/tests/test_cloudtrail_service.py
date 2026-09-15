@@ -90,3 +90,36 @@ def test_lookup_events_rejects_range_over_max_days(mock_get_client):
         )
 
     mock_get_client.assert_not_called()
+
+
+@pytest.mark.parametrize("limit", [1, 17, 75])
+@patch("app.services.cloudtrail_service.get_cloudtrail_client")
+def test_pagination_preserves_every_event(mock_get_client, limit):
+    data = [{"EventName": f"event-{i}", "CloudTrailEvent": f"event-{i}"} for i in range(123)]
+    page_sizes = []
+
+    def fetch(MaxResults, NextToken="0", **kwargs):
+        page_sizes.append(MaxResults)
+        start = int(NextToken)
+        page = data[start:start + MaxResults]
+        response = {"Events": page}
+        if start + len(page) < len(data):
+            response["NextToken"] = str(start + len(page))
+        return response
+
+    mock_get_client.return_value.lookup_events.side_effect = fetch
+    cursor = None
+    messages = []
+    for _ in range(130):
+        result = cloudtrail_service.lookup_events(
+            datetime(2026, 1, 1, tzinfo=timezone.utc), datetime(2026, 1, 2, tzinfo=timezone.utc),
+            None, None, limit, cursor, make_settings(),
+        )
+        assert len(result.events) <= limit
+        messages.extend(event.message for event in result.events)
+        cursor = result.cursor
+        if cursor is None:
+            break
+    assert cursor is None
+    assert messages == [event["CloudTrailEvent"] for event in data]
+    assert len(set(page_sizes)) == 1

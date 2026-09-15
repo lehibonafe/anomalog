@@ -26,13 +26,17 @@ def lookup_events(
             "start and end."
         )
 
+    if limit < 1:
+        raise BadRequestError("Limit must be at least 1.")
+
     client = get_cloudtrail_client()
     effective_limit = min(limit, settings.max_log_search_lines)
 
+    page_size = min(_PAGE_SIZE, effective_limit)
     kwargs: dict = {
         "StartTime": start_time,
         "EndTime": end_time,
-        "MaxResults": _PAGE_SIZE,
+        "MaxResults": page_size,
     }
     if lookup_attribute_key and lookup_attribute_value:
         kwargs["LookupAttributes"] = [
@@ -43,7 +47,9 @@ def lookup_events(
 
     raw_entries: list[tuple[str, datetime | None, str]] = []
     next_token: str | None = None
-    while len(raw_entries) < effective_limit:
+    # Keep AWS parameters stable across continuations. Stop before fetching
+    # a page that could exceed our remaining capacity; never discard overflow.
+    while len(raw_entries) + page_size <= effective_limit:
         resp = client.lookup_events(**kwargs)
         for e in resp.get("Events", []):
             event_time = e.get("EventTime")
@@ -73,14 +79,12 @@ def lookup_events(
     ]
 
     all_events.sort(key=lambda ev: ev.timestamp or datetime.min.replace(tzinfo=timezone.utc))
-    truncated = len(all_events) > effective_limit
-    all_events = all_events[:effective_limit]
     for i, ev in enumerate(all_events):
         ev.line_index = i
 
     return CloudTrailSearchResponse(
         events=all_events,
         cursor=next_token,
-        truncated=truncated,
+        truncated=False,
         total_returned=len(all_events),
     )

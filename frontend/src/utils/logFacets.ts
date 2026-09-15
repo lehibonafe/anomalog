@@ -13,8 +13,8 @@ export const EMPTY_LOG_FACETS: LogFacetSelection = {
 const LEVEL_RE = /\b(TRACE|DEBUG|INFO|WARN(?:ING)?|ERROR|FATAL|CRITICAL)\b/i
 const METHOD_RE = /\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/i
 const REQUEST_RE = /\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+((?:https?:\/\/[^\s]+|\/[^\s?]*))/i
-const STATUS_RE = /(?:\bstatus(?:_code)?|http\.status_code|response\.status)\s*[=:]\s*["']?([2-5]\d{2})\b/i
-const FALLBACK_STATUS_RE = /\b([2-5]\d{2})\b/
+const STATUS_RE = /(?:\bstatus(?:_code)?|http\.status_code|response\.status)\s*[=:]\s*["']?([1-5]\d{2})\b/i
+const FALLBACK_STATUS_RE = /\b([1-5]\d{2})\b/
 const EXCEPTION_RE = /\b([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*(?:Exception|Error))\b/
 const DURATION_RE = /\b(?:duration|latency|elapsed|response[_-]?time)(?:_ms)?\s*[=:]\s*["']?(\d+(?:\.\d+)?)\s*(ms|s|sec|seconds?)?\b/i
 
@@ -95,7 +95,7 @@ export function extractLogFacets(event: LogEvent): ExtractedLogFacets {
   const rawException = field(fields, FIELD_NAMES.exception) ?? event.message.match(EXCEPTION_RE)?.[1]
 
   const level = rawLevel?.toUpperCase() === 'WARNING' ? 'WARN' : rawLevel?.toUpperCase()
-  const status = rawStatus?.match(/^[2-5]\d{2}$/)?.[0]
+  const status = rawStatus?.match(/^[1-5]\d{2}$/)?.[0]
   const route = rawRoute ? normalizeRoute(rawRoute) : undefined
   const duration = extractDuration(fields, event.message)
 

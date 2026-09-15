@@ -62,10 +62,10 @@ export function CloudTrailSearchBar() {
             : "Search failed. Check the backend logs."}
         </p>
       )}
-      {search.data?.truncated && (
+      {search.data?.cursor && (
         <div className="load-more-row">
           <p className="hint">
-            Showing {loadedCount.toLocaleString()} events — more match this query.
+            Showing {loadedCount.toLocaleString()} events · Continue loading to check for more results.
           </p>
           <button
             type="button"

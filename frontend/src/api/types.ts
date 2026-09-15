@@ -36,6 +36,24 @@ export interface CloudWatchSearchResponse {
   total_returned: number;
 }
 
+export type LiveTailServerMessage =
+  | {
+      type: "session_started";
+      inactivity_timeout_seconds: number;
+      cost_per_minute_usd: number;
+      free_tier_minutes: number;
+    }
+  | { type: "events"; events: LogEvent[]; sampled: boolean }
+  | { type: "session_stopped" | "session_ended"; reason: string }
+  | { type: "error"; message: string };
+
+export interface LiveTailConfig {
+  live_tail_max_concurrent_sessions: number;
+  live_tail_inactivity_timeout_seconds: number;
+  live_tail_cost_per_minute_usd: number;
+  live_tail_free_tier_minutes: number;
+}
+
 export type CloudTrailLookupAttributeKey =
   | "EventId"
   | "EventName"
@@ -97,6 +115,11 @@ export interface AnalysisResponse {
   analysis: string;
   chunks_analyzed: number;
   chunks_total: number;
+  lines_submitted: number;
+  lines_analyzed: number;
+  lines_omitted_by_limits: number;
+  lines_not_analyzed: number;
+  lines_shortened: number;
   lines_considered: number;
   lines_skipped_by_prefilter: number;
   model: string;

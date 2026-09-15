@@ -8,6 +8,7 @@ export type LlmProvider = "gemini" | "openai" | "anthropic" | "ollama" | "litell
 export interface HighlightedRange {
   start: number;
   end: number;
+  ranges?: Array<{ start: number; end: number }>;
 }
 
 interface SelectionState {

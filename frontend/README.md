@@ -1,50 +1,69 @@
-# React + TypeScript + Vite
+# Anomalog Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The React and TypeScript interface for Anomalog, built with Vite. It supports
+historical CloudWatch and CloudTrail searches, interactive log facets and
+analytics, real-time CloudWatch Live Tail, and evidence-linked AI summaries.
 
-Currently, two official plugins are available:
+See the repository [README](../README.md) for backend setup, AWS permissions,
+Live Tail operations, and deployment guidance.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Local development
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
-
-- Configure the top-level `parserOptions` property like this:
-
-```js
-export default tseslint.config({
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+npm install
+cp .env.example .env
+npm run dev
 ```
 
-- Replace `tseslint.configs.recommended` to `tseslint.configs.recommendedTypeChecked` or `tseslint.configs.strictTypeChecked`
-- Optionally add `...tseslint.configs.stylisticTypeChecked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and update the config:
+The default frontend URL is `http://localhost:5173`. Set
+`VITE_API_BASE_URL` in `.env` to the browser-accessible FastAPI base URL:
 
-```js
-// eslint.config.js
-import react from 'eslint-plugin-react'
-
-export default tseslint.config({
-  // Set the react version
-  settings: { react: { version: '18.3' } },
-  plugins: {
-    // Add the react plugin
-    react,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended rules
-    ...react.configs.recommended.rules,
-    ...react.configs['jsx-runtime'].rules,
-  },
-})
+```dotenv
+VITE_API_BASE_URL=http://localhost:8000
 ```
+
+For HTTPS deployments, use an HTTPS API URL. The Live Tail client derives a
+secure `wss://` URL automatically.
+
+## Interface behavior
+
+- **Source selector:** switches between CloudWatch Logs and CloudTrail.
+- **Historical search:** uses the selected time range and supports cursor-based
+  **Load more** pagination.
+- **Log analytics:** updates from the events currently loaded in the browser.
+  HTTP status cards count `1xx` through `5xx`, using the status-code color
+  scheme documented in the root README.
+- **Log facets:** extract level, method, route, HTTP status, exception, and
+  duration fields. Selecting a facet filters and highlights matching logs.
+- **AI log summary:** becomes available when at least one log is listed. Line
+  and range citations in a result are clickable and navigate to the referenced
+  logs.
+- **Model settings:** opens as a modal from the right side of the app header.
+  LiteLLM is the default provider and its default server model is
+  `qwen3.8-flash`.
+
+## Live Tail UI
+
+`src/components/FilterBar/LiveTailControls.tsx` owns the browser side of a Live
+Tail session. Users must select 1–10 CloudWatch log groups and confirm the cost
+dialog before the WebSocket is opened.
+
+After AWS starts the session, the UI clears the historical result set and
+appends masked live events. The event counter, elapsed timer, estimated cost,
+facets, HTTP status cards, and analytics graph update as events arrive. AWS
+sampling is shown as a warning because sampled counts are not exhaustive.
+
+User activity is sent to the backend at most once every 30 seconds. The socket
+is closed when the component unmounts or the page unloads. The backend remains
+authoritative for inactivity timeouts, concurrency limits, stream closure, and
+masking.
+
+## Validation
+
+```bash
+npm run lint
+npm run build
+```
+
+The project currently has no frontend test runner, so both commands are
+required after UI changes.

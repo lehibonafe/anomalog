@@ -42,10 +42,21 @@ class ChunkResult(BaseModel):
     analysis: str
 
 
+class LineReference(BaseModel):
+    start: int
+    end: int
+
+
 class AnalysisResponse(BaseModel):
     analysis: str
+    references: list[LineReference] = []
     chunks_analyzed: int
     chunks_total: int
+    lines_submitted: int = 0
+    lines_analyzed: int = 0
+    lines_omitted_by_limits: int = 0
+    lines_not_analyzed: int = 0
+    lines_shortened: int = 0
     lines_considered: int
     lines_skipped_by_prefilter: int
     model: str

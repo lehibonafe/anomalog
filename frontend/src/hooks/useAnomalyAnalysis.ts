@@ -5,13 +5,13 @@ import type { AnalysisResponse, ChatMessage } from "../api/types";
 import { useSelectionStore } from "../state/selectionStore";
 
 export interface AnomalyAnalysisVars {
+  events: Parameters<typeof runAnomalyAnalysis>[0]['events'];
   userPrompt: string;
   history?: ChatMessage[];
   signal?: AbortSignal;
 }
 
 export function useAnomalyAnalysis() {
-  const events = useSelectionStore((s) => s.events);
   const sourceDescription = useSelectionStore((s) => s.sourceDescription);
   const llmProvider = useSelectionStore((s) => s.llmProvider);
   const llmApiKey = useSelectionStore((s) => s.llmApiKey);
@@ -19,7 +19,7 @@ export function useAnomalyAnalysis() {
   const llmBaseUrl = useSelectionStore((s) => s.llmBaseUrl);
 
   return useMutation<AnalysisResponse, Error, AnomalyAnalysisVars>({
-    mutationFn: ({ userPrompt, history, signal }) =>
+    mutationFn: ({ events, userPrompt, history, signal }) =>
       runAnomalyAnalysis(
         {
           events,

@@ -1,11 +1,18 @@
 import { useMemo } from 'react'
-import { format } from 'date-fns'
 
 import type { LogEvent } from '../../api/types'
-import { useSelectionStore } from '../../state/selectionStore'
 import type { Finding, FindingSeverity } from '../../utils/findings'
 import type { LogFacetSelection } from '../../utils/logFacets'
+import { formatSingaporeDateTime } from '../../utils/time'
 import { LogFacetFilters } from './LogFacetFilters'
+
+const HTTP_STATUS_DEFS = [
+  { code: '1xx', label: 'Info', color: 'var(--status-1xx)', regex: /\b1\d{2}\b/, severity: 'info' },
+  { code: '2xx', label: 'Success', color: 'var(--status-2xx)', regex: /\b2\d{2}\b/, severity: 'info' },
+  { code: '3xx', label: 'Redirection', color: 'var(--status-3xx)', regex: /\b3\d{2}\b/, severity: 'info' },
+  { code: '4xx', label: 'Client Error', color: 'var(--status-4xx)', regex: /\b4\d{2}\b/, severity: 'warning' },
+  { code: '5xx', label: 'Server Error', color: 'var(--status-5xx)', regex: /\b5\d{2}\b/, severity: 'critical' },
+] as const
 
 const STATUS_DEFS = [
   { label: 'Succeeded', color: 'var(--severity-success)', regex: /\b(succeed(?:ed)?|success(?:ful)?)\b/i, severity: 'info' as const },
@@ -48,68 +55,53 @@ function eventDate(event: LogEvent) {
 }
 
 function LineChart({ events, activeFindingId, onSelectFinding }: InteractiveChartProps) {
-  const highlightedRange = useSelectionStore((state) => state.highlightedRange)
-  const setHighlightedRange = useSelectionStore((state) => state.setHighlightedRange)
   const series = useMemo(() => {
     const dated = events.map((event) => ({ event, date: eventDate(event) })).filter((item) => item.date) as Array<{ event: LogEvent; date: Date }>
-    if (!dated.length) return { labels: [], client: [], server: [], peakRange: null, peakLabel: 'No data' }
+    if (!dated.length) return {
+      labels: [],
+      statuses: HTTP_STATUS_DEFS.map((status) => ({ ...status, values: Array<number>(12).fill(0) })),
+    }
     const start = Math.min(...dated.map((item) => item.date.getTime()))
     const end = Math.max(...dated.map((item) => item.date.getTime()))
     const span = Math.max(1, end - start)
-    const buckets = Array.from({ length: 12 }, () => ({ client: 0, server: 0, lineIndexes: [] as number[] }))
+    const buckets = Array.from({ length: 12 }, () => Array<number>(HTTP_STATUS_DEFS.length).fill(0))
     dated.forEach(({ event, date }) => {
       const index = Math.min(11, Math.floor(((date.getTime() - start) / span) * 12))
-      const isClientError = /\b4\d{2}\b/.test(event.message)
-      const isServerError = /\b5\d{2}\b|\b(?:exception|error|fatal)\b/i.test(event.message)
-      if (isClientError) buckets[index].client += 1
-      if (isServerError) buckets[index].server += 1
-      if (isClientError || isServerError) buckets[index].lineIndexes.push(event.line_index)
+      HTTP_STATUS_DEFS.forEach((status, statusIndex) => {
+        if (status.regex.test(event.message)) buckets[index][statusIndex] += 1
+      })
     })
-    const peakIndex = buckets.reduce((best, bucket, index) => (
-      bucket.client + bucket.server > buckets[best].client + buckets[best].server ? index : best
-    ), 0)
-    const peakLines = buckets[peakIndex].lineIndexes
     return {
-      labels: Array.from({ length: 4 }, (_, index) => format(new Date(start + (span * index) / 3), 'MMM d, HH:mm')),
-      client: buckets.map((bucket) => bucket.client),
-      server: buckets.map((bucket) => bucket.server),
-      peakRange: peakLines.length ? { start: Math.min(...peakLines), end: Math.max(...peakLines) } : null,
-      peakLabel: `${format(new Date(start + (span * peakIndex) / 12), 'MMM d, HH:mm')} – ${format(new Date(start + (span * (peakIndex + 1)) / 12), 'HH:mm')}`,
+      labels: Array.from({ length: 4 }, (_, index) => formatSingaporeDateTime(new Date(start + (span * index) / 3))),
+      statuses: HTTP_STATUS_DEFS.map((status, statusIndex) => ({
+        ...status,
+        values: buckets.map((bucket) => bucket[statusIndex]),
+      })),
     }
   }, [events])
+  const statusTotals = useMemo(() => HTTP_STATUS_DEFS.map((status) => ({
+    ...status,
+    count: events.filter((event) => status.regex.test(event.message)).length,
+  })), [events])
 
-  const max = Math.max(1, ...series.client, ...series.server)
+  const max = Math.max(1, ...series.statuses.flatMap((status) => status.values))
   const points = (values: number[]) => values.map((value, index) => `${28 + index * 62},${176 - (value / max) * 138}`).join(' ')
-  const areaPoints = (values: number[]) => `28,176 ${points(values)} 710,176`
-  const clientTotal = series.client.reduce((sum, value) => sum + value, 0)
-  const serverTotal = series.server.reduce((sum, value) => sum + value, 0)
-  const peak = Math.max(...series.client.map((value, index) => value + series.server[index]), 0)
-  const peakActive = series.peakRange !== null
-    && highlightedRange?.start === series.peakRange.start
-    && highlightedRange?.end === series.peakRange.end
 
   return (
     <div className="comparison-chart">
       <div className="comparison-summary">
-        <button type="button" className={activeFindingId === 'dashboard-4xx' ? 'active' : ''} aria-pressed={activeFindingId === 'dashboard-4xx'} onClick={() => toggleFinding('dashboard-4xx', '4xx client error', /\b4\d{2}\b/, 'warning', activeFindingId, onSelectFinding)}><span>Client errors</span><strong>{clientTotal.toLocaleString()}</strong><small>4xx responses</small></button>
-        <button type="button" className={activeFindingId === 'dashboard-exceptions' ? 'active' : ''} aria-pressed={activeFindingId === 'dashboard-exceptions'} onClick={() => toggleFinding('dashboard-exceptions', 'Server errors & exceptions', /\b5\d{2}\b|\b(?:exception|error|fatal)\b/i, 'critical', activeFindingId, onSelectFinding)}><span>Server errors &amp; exceptions</span><strong>{serverTotal.toLocaleString()}</strong><small>5xx and application errors</small></button>
-        <button type="button" className={peakActive ? 'active' : ''} aria-pressed={peakActive} disabled={!series.peakRange} onClick={() => setHighlightedRange(peakActive ? null : series.peakRange)}><span>Peak interval</span><strong>{peak.toLocaleString()}</strong><small>{series.peakLabel}</small></button>
+        {statusTotals.map((status) => {
+          const id = `dashboard-${status.code}`
+          return <button type="button" key={status.code} className={activeFindingId === id ? 'active' : ''} aria-pressed={activeFindingId === id} onClick={() => toggleFinding(id, `${status.code} - ${status.label}`, status.regex, status.severity, activeFindingId, onSelectFinding)}><span style={{ color: status.color }}>{status.code} - {status.label}</span><strong>{status.count.toLocaleString()}</strong></button>
+        })}
       </div>
-      <svg viewBox="0 0 740 210" role="img" aria-label="Exception comparison over time">
-        <defs>
-          <linearGradient id="client-area" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--severity-info)" stopOpacity=".28" /><stop offset="100%" stopColor="var(--severity-info)" stopOpacity="0" /></linearGradient>
-          <linearGradient id="exception-area" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--severity-warning)" stopOpacity=".24" /><stop offset="100%" stopColor="var(--severity-warning)" stopOpacity="0" /></linearGradient>
-        </defs>
+      <svg viewBox="0 0 740 210" role="img" aria-label="HTTP status code trends over time">
         {[38, 84, 130, 176].map((y) => <line key={y} x1="28" x2="710" y1={y} y2={y} className="grid-line" />)}
         <text x="4" y="42" className="chart-y-label">{max}</text>
         <text x="4" y="110" className="chart-y-label">{Math.round(max / 2)}</text>
         <text x="14" y="180" className="chart-y-label">0</text>
-        <polygon points={areaPoints(series.client)} fill="url(#client-area)" />
-        <polygon points={areaPoints(series.server)} fill="url(#exception-area)" />
-        <polyline points={points(series.client)} className="line-series line-blue" />
-        <polyline points={points(series.server)} className="line-series line-orange" />
-        {series.client.map((value, index) => <circle key={`c-${index}`} cx={28 + index * 62} cy={176 - (value / max) * 138} r="3.2" className="dot-blue"><title>Client errors: {value}</title></circle>)}
-        {series.server.map((value, index) => <circle key={`s-${index}`} cx={28 + index * 62} cy={176 - (value / max) * 138} r="3.2" className="dot-orange"><title>Exceptions: {value}</title></circle>)}
+        {series.statuses.map((status) => <polyline key={status.code} points={points(status.values)} className="line-series" style={{ stroke: status.color }} />)}
+        {series.statuses.flatMap((status) => status.values.map((value, index) => <circle key={`${status.code}-${index}`} cx={28 + index * 62} cy={176 - (value / max) * 138} r="3.2" className="status-code-dot" style={{ fill: status.color }}><title>{status.code} {status.label}: {value}</title></circle>))}
       </svg>
       <div className="chart-axis">{series.labels.map((label) => <span key={label}>{label}</span>)}</div>
     </div>
@@ -146,7 +138,7 @@ export function AnalyticsDashboard({ events, activeFindingId, onSelectFinding, f
   const chartProps = { events, activeFindingId, onSelectFinding }
   return (
     <section className="analytics-dashboard" aria-label="Log analytics dashboard">
-      <article className="dashboard-card comparison-card"><h2>Error Trends</h2><LineChart {...chartProps} /></article>
+      <article className="dashboard-card comparison-card"><h2>HTTP Status Overview</h2><LineChart {...chartProps} /></article>
       <article className="dashboard-card status-card"><h2>Status</h2><StatusDonut {...chartProps} /></article>
       <article className="dashboard-card facets-card"><LogFacetFilters events={events} selection={facetSelection} onChange={onFacetChange} /></article>
     </section>

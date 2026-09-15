@@ -183,6 +183,8 @@ async def test_analyze_returns_partial_findings_when_quota_hits_mid_run(monkeypa
 
     assert result.chunks_analyzed == 1
     assert result.analysis == "[0] warning: x"
+    assert result.lines_analyzed == 1
+    assert result.lines_not_analyzed == 2
     assert result.warnings
 
 
@@ -241,3 +243,80 @@ async def test_connection_does_not_raise_for_unreachable_base_url(monkeypatch):
 
     assert result.success is False
     assert "Connection refused" in result.message
+
+
+@pytest.mark.parametrize("caps", [
+    {"max_analysis_lines": 3},
+    {"max_analysis_chars": 30},
+    {"chunk_size_lines": 2, "gemini_max_chunks_per_analysis": 1},
+])
+async def test_coverage_accounts_for_limits(monkeypatch, caps):
+    service = AnomalyService(make_settings(**caps))
+    received = []
+
+    async def respond(chunk_events, *args):
+        received.extend(chunk_events)
+        return ChunkResult(analysis="Errors occurred.")
+
+    monkeypatch.setattr(service, "_call_chunk", respond)
+    result = await service.analyze(
+        [make_event(i, "ERROR boom") for i in range(8)],
+        AnalysisContext(source_description="test"),
+    )
+    assert result.lines_submitted == 8
+    assert result.lines_analyzed == len(received)
+    assert result.lines_considered == len(received)
+    assert result.lines_omitted_by_limits == 8 - len(received)
+    assert result.lines_not_analyzed == 0
+    assert result.warnings
+
+
+async def test_coverage_accounts_for_failed_chunks_and_shortened_lines(monkeypatch):
+    service = AnomalyService(make_settings(chunk_size_lines=1, max_line_length=20))
+
+    async def respond(chunk_events, *args):
+        if chunk_events[0].line_index == 1:
+            raise LLMRequestError("unavailable")
+        return ChunkResult(analysis="Errors occurred.")
+
+    monkeypatch.setattr(service, "_call_chunk", respond)
+    result = await service.analyze(
+        [make_event(i, "ERROR " + "x" * 50) for i in range(2)],
+        AnalysisContext(source_description="test"),
+    )
+    assert result.lines_submitted == 2
+    assert result.lines_analyzed == 1
+    assert result.lines_not_analyzed == 1
+    assert result.lines_shortened == 2
+    assert result.lines_omitted_by_limits == 0
+
+
+@pytest.mark.parametrize("mode", ["empty", "filtered", "sampled", "custom"])
+async def test_coverage_totals_reconcile(monkeypatch, mode):
+    service = AnomalyService(make_settings(max_analysis_lines=5))
+    events = [make_event(i, "normal operation") for i in range(10)]
+    if mode == "empty":
+        events = []
+    elif mode == "filtered":
+        events[5] = make_event(5, "ERROR boom")
+
+    async def respond(*args):
+        return ChunkResult(analysis="Reviewed logs.")
+
+    monkeypatch.setattr(service, "_call_chunk", respond)
+    result = await service.analyze(
+        events, AnalysisContext(source_description="test"),
+        user_prompt="Review normal operation" if mode == "custom" else None,
+    )
+    assert result.lines_submitted == len(events)
+    assert result.lines_submitted == (
+        result.lines_skipped_by_prefilter + result.lines_omitted_by_limits
+        + result.lines_analyzed + result.lines_not_analyzed
+    )
+    assert result.lines_considered == result.lines_analyzed + result.lines_not_analyzed
+    assert result.lines_shortened == 0
+    if mode in ("filtered", "sampled"):
+        assert result.lines_skipped_by_prefilter == 5
+    elif mode == "custom":
+        assert result.lines_skipped_by_prefilter == 0
+        assert result.lines_omitted_by_limits == 5

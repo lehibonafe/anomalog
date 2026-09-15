@@ -32,7 +32,7 @@ export function CloudTrailSourcePicker() {
             value={attributeKey}
             onChange={(e) => setAttributeKey(e.target.value as CloudTrailLookupAttributeKey | "")}
           >
-            <option value="">None</option>
+            <option value="">All</option>
             {LOOKUP_ATTRIBUTE_KEYS.map((key) => (
               <option key={key} value={key}>
                 {key}

@@ -2,14 +2,6 @@ import { useTestConnection } from "../../hooks/useTestConnection";
 import type { LlmProvider } from "../../state/selectionStore";
 import { useSelectionStore } from "../../state/selectionStore";
 
-const PROVIDER_MODEL_PLACEHOLDER: Record<LlmProvider, string> = {
-  gemini: "gemini-2.5-flash",
-  openai: "gpt-4o-mini",
-  anthropic: "claude-haiku-4-5-20251001",
-  ollama: "llama3.1",
-  litellm: "qwen3:4b",
-};
-
 export function ModelSettingsPanel() {
   const llmProvider = useSelectionStore((s) => s.llmProvider);
   const setLlmProvider = useSelectionStore((s) => s.setLlmProvider);
@@ -56,7 +48,7 @@ export function ModelSettingsPanel() {
         Model
         <input
           type="text"
-          placeholder={`e.g. ${PROVIDER_MODEL_PLACEHOLDER[llmProvider]} (default if blank)`}
+          placeholder="qwen3.8-flash"
           value={llmModel}
           onChange={(e) => setLlmModel(e.target.value)}
         />

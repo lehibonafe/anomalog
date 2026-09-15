@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**CloudCortex** — a web app for investigating AWS CloudWatch Logs and
+**Anomalog** — a web app for investigating AWS CloudWatch Logs and
 CloudTrail events: pick a source (log group(s), or CloudTrail lookup
 attributes) and time range, view matching log lines, and run an LLM analysis
 over the filtered slice —

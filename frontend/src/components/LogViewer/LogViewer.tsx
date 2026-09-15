@@ -15,8 +15,7 @@ interface RowProps {
   events: LogEvent[];
   keyword: string;
   activeFinding: Finding | null;
-  highlightStart: number | null;
-  highlightEnd: number | null;
+  highlightRanges: Array<{ start: number; end: number }>;
   focusedIndex: number;
   expandedLines: Set<number>;
   onToggleExpand: (lineIndex: number) => void;
@@ -125,19 +124,16 @@ function Row({
   events,
   keyword,
   activeFinding,
-  highlightStart,
-  highlightEnd,
+  highlightRanges,
   focusedIndex,
   expandedLines,
   onToggleExpand,
   facetSelection,
 }: RowComponentProps<RowProps>) {
   const event = events[index];
-  const isHighlighted =
-    highlightStart !== null &&
-    highlightEnd !== null &&
-    event.line_index >= highlightStart &&
-    event.line_index <= highlightEnd;
+  const isHighlighted = highlightRanges.some(
+    (range) => event.line_index >= range.start && event.line_index <= range.end,
+  );
   const isExpanded = expandedLines.has(event.line_index);
   const json = useMemo(() => (isExpanded ? extractJson(event.message) : null), [isExpanded, event.message]);
   const hasDynamicHighlight = keyword.trim().length > 0 || activeFinding !== null || Object.values(facetSelection).some((values) => values.length > 0);
@@ -193,6 +189,7 @@ interface LogViewerProps {
   onSelectFinding: (finding: Finding | null) => void;
   facetSelection: LogFacetSelection;
   onFacetChange: (selection: LogFacetSelection) => void;
+  onVisibleEventsChange: (events: LogEvent[]) => void;
 }
 
 type ExportFormat = "json" | "csv" | "txt";
@@ -234,14 +231,20 @@ function downloadEvents(events: LogEvent[], format: ExportFormat) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `cloudcortex-logs-${timestamp}.${format}`;
+  anchor.download = `anomalog-logs-${timestamp}.${format}`;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
 }
 
-export function LogViewer({ activeFinding, onSelectFinding, facetSelection, onFacetChange }: LogViewerProps) {
+export function LogViewer({
+  activeFinding,
+  onSelectFinding,
+  facetSelection,
+  onFacetChange,
+  onVisibleEventsChange,
+}: LogViewerProps) {
   const events = useSelectionStore((s) => s.events);
   const sourceDescription = useSelectionStore((s) => s.sourceDescription);
   const highlightedRange = useSelectionStore((s) => s.highlightedRange);
@@ -281,6 +284,10 @@ export function LogViewer({ activeFinding, onSelectFinding, facetSelection, onFa
       : keywordFilteredEvents,
     [keywordFilteredEvents, activeFinding],
   );
+
+  useEffect(() => {
+    onVisibleEventsChange(filteredEvents);
+  }, [filteredEvents, onVisibleEventsChange]);
 
   useEffect(() => {
     if (highlightedRange && listRef.current) {
@@ -407,8 +414,8 @@ export function LogViewer({ activeFinding, onSelectFinding, facetSelection, onFa
               events: filteredEvents,
               keyword,
               activeFinding,
-              highlightStart: highlightedRange?.start ?? null,
-              highlightEnd: highlightedRange?.end ?? null,
+              highlightRanges: highlightedRange?.ranges
+                ?? (highlightedRange ? [{ start: highlightedRange.start, end: highlightedRange.end }] : []),
               focusedIndex,
               expandedLines,
               onToggleExpand: toggleExpand,

@@ -3,6 +3,34 @@ import { differenceInMilliseconds, subDays, subHours, subMinutes } from "date-fn
 export type TimePreset = "15m" | "1h" | "24h" | "7d";
 
 export const MAX_TIME_RANGE_DAYS = 7;
+export const DISPLAY_TIME_ZONE = "Asia/Singapore";
+export const DISPLAY_TIME_ZONE_LABEL = "SGT";
+
+const singaporeInputFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: DISPLAY_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+const singaporeChartDateTimeFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: DISPLAY_TIME_ZONE,
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+const singaporeChartTimeFormatter = new Intl.DateTimeFormat("en-GB", {
+  timeZone: DISPLAY_TIME_ZONE,
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
 
 export function exceedsMaxTimeRange(start: string, end: string): boolean {
   if (!start || !end) return false;
@@ -38,5 +66,34 @@ export function presetToRange(preset: TimePreset, now: Date): { start: string; e
 
 export function formatTimestamp(ts: string | null): string {
   if (!ts) return "";
-  return new Date(ts).toLocaleString();
+  const value = new Date(ts);
+  if (Number.isNaN(value.getTime())) return "";
+  return `${value.toLocaleString(undefined, { timeZone: DISPLAY_TIME_ZONE })} ${DISPLAY_TIME_ZONE_LABEL}`;
+}
+
+export function formatSingaporeDateTime(value: Date): string {
+  return singaporeChartDateTimeFormatter.format(value);
+}
+
+export function formatSingaporeTime(value: Date): string {
+  return singaporeChartTimeFormatter.format(value);
+}
+
+export function toSingaporeInput(iso: string): string {
+  if (!iso) return "";
+  const value = new Date(iso);
+  if (Number.isNaN(value.getTime())) return "";
+  const parts = Object.fromEntries(
+    singaporeInputFormatter
+      .formatToParts(value)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
+export function fromSingaporeInput(value: string): string {
+  if (!value) return "";
+  const instant = new Date(`${value}:00+08:00`);
+  return Number.isNaN(instant.getTime()) ? "" : instant.toISOString();
 }
