@@ -7,7 +7,7 @@ import pytest
 from app.config import Settings
 from app.core.errors import LLMRequestError
 from app.services.llm.base import LLMRateLimited
-from app.services.llm.ollama_provider import DEFAULT_BASE_URL, OllamaProvider
+from app.services.llm.ollama_provider import DEFAULT_BASE_URL, DEFAULT_MODEL, OllamaProvider
 
 
 def make_settings(**overrides) -> Settings:
@@ -16,13 +16,19 @@ def make_settings(**overrides) -> Settings:
 
 def make_provider(api_key: str | None = None, base_url: str | None = None) -> OllamaProvider:
     settings = make_settings()
-    return OllamaProvider(api_key=api_key, model="llama3.1", base_url=base_url, settings=settings)
+    return OllamaProvider(api_key=api_key, model=DEFAULT_MODEL, base_url=base_url, settings=settings)
 
 
 def test_defaults_base_url_and_key_when_omitted():
     provider = make_provider(api_key=None, base_url=None)
 
     assert str(provider.client.base_url).rstrip("/") == DEFAULT_BASE_URL.rstrip("/")
+
+
+def test_recommended_default_model():
+    defaults = OllamaProvider.resolve_defaults(make_settings())
+
+    assert defaults.model == "qwen3.5:9b"
 
 
 async def test_call_chunk_returns_text_response():
@@ -37,6 +43,8 @@ async def test_call_chunk_returns_text_response():
     result = await provider.call_chunk("system prompt", "prompt")
 
     assert result.analysis == "line [0] looks fine."
+    request = provider.client.chat.completions.create.await_args.kwargs
+    assert request["extra_body"] == {"reasoning_effort": "none"}
 
 
 async def test_call_chunk_raises_request_error_on_empty_response():

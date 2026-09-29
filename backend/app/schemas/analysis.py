@@ -54,10 +54,14 @@ class AnalysisResponse(BaseModel):
     chunks_total: int
     lines_submitted: int = 0
     lines_analyzed: int = 0
+    lines_sent_to_model: int = 0
+    lines_collapsed_as_duplicates: int = 0
     lines_omitted_by_limits: int = 0
     lines_not_analyzed: int = 0
     lines_shortened: int = 0
     lines_considered: int
     lines_skipped_by_prefilter: int
+    history_messages_omitted: int = 0
+    estimated_input_tokens: int = 0
     model: str
     warnings: list[str] = []

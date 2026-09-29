@@ -19,7 +19,7 @@ export function ModelSettingsControl() {
 
     if (isOpen && !dialog.open) {
       dialog.showModal()
-      window.requestAnimationFrame(() => dialog.querySelector<HTMLElement>('select')?.focus())
+      window.requestAnimationFrame(() => dialog.querySelector<HTMLElement>('.model-provider-select-trigger')?.focus())
     } else if (!isOpen && dialog.open) {
       dialog.close()
     }

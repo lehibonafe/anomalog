@@ -5,7 +5,7 @@ from app.core.errors import BadRequestError, LLMRequestError
 from app.schemas.analysis import ChunkResult
 from app.services.llm.base import DEFAULT_LLM_TIMEOUT_S, LLMProvider, LLMRateLimited, ProviderDefaults
 
-DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+DEFAULT_MODEL = "claude-sonnet-5"
 DEFAULT_RPM = 50
 DEFAULT_MAX_RETRIES = 2
 
@@ -35,12 +35,13 @@ class AnthropicProvider(LLMProvider):
             api_key=api_key, base_url=base_url, timeout=DEFAULT_LLM_TIMEOUT_S, max_retries=0
         )
         self.model = model
+        self.max_output_tokens = settings.max_llm_output_tokens
 
     async def call_chunk(self, system: str, prompt: str) -> ChunkResult:
         try:
             response = await self.client.messages.create(
                 model=self.model,
-                max_tokens=4096,
+                max_tokens=self.max_output_tokens,
                 system=system,
                 messages=[{"role": "user", "content": prompt}],
             )

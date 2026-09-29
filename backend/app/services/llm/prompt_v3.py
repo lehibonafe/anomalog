@@ -204,7 +204,20 @@ def build_prompt(
     """Builds the per-request user turn: source + logs (+ conversation history,
     for chat follow-ups) + task. Send alongside SYSTEM_PROMPT as a separate
     system-role message — see the module docstring for why it's kept apart."""
-    lines = "\n".join(f"[{e.line_index}] {e.timestamp or ''} {e.message}" for e in events)
+    rendered_lines: list[str] = []
+    for event in events:
+        occurrence_count = getattr(event, "occurrence_count", 1)
+        aggregate = ""
+        if occurrence_count > 1:
+            aggregate = (
+                f" app_occurrences={occurrence_count}"
+                f" app_first={getattr(event, 'aggregate_first_timestamp', 'unknown')}"
+                f" app_last={getattr(event, 'aggregate_last_timestamp', 'unknown')}"
+            )
+        rendered_lines.append(
+            f"[{event.line_index}] {event.timestamp or ''}{aggregate} {event.message}"
+        )
+    lines = "\n".join(rendered_lines)
     source = SOURCE_TEMPLATE.format(source_description=context.source_description)
     logs = LOGS_TEMPLATE.format(lines=lines)
 

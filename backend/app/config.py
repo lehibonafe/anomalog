@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -13,13 +14,17 @@ class Settings(BaseSettings):
     litellm_api_key: str
     litellm_model: str = "qwen3.8-flash"
     litellm_base_url: str = "http://llm.etapinc.com/v1"
+    litellm_enable_thinking: bool = False
 
     # Gemini (opt-in; no longer the server-configured default)
     gemini_api_key: str | None = None
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3.8-flash"
     gemini_rpm_limit: int = 8
     gemini_max_chunks_per_analysis: int = 6
     gemini_max_retries: int = 2
+    gemini_thinking_level: Literal["low", "medium", "high"] = "low"
+    # Retained for callers that explicitly select a Gemini 2.5 model.
+    gemini_thinking_budget: int = Field(default=0, ge=-1, le=24576)
 
     # Masking service (external PII masking API — primary masker; falls back
     # to local mask_message on failure)
@@ -40,8 +45,11 @@ class Settings(BaseSettings):
     max_time_range_days: int = 7
     max_log_search_lines: int = 5000
     max_chat_history_messages: int = 40
+    max_chat_history_tokens: int = Field(default=4000, ge=0)
     max_analysis_lines: int = 1500
     max_analysis_chars: int = 500_000
+    max_analysis_tokens: int = Field(default=40_000, ge=1000)
+    max_llm_output_tokens: int = Field(default=2048, ge=256, le=8192)
     max_line_length: int = 2000
     chunk_size_lines: int = 250
 

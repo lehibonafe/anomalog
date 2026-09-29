@@ -6,7 +6,7 @@ from app.core.errors import BadRequestError, LLMRequestError
 from app.schemas.analysis import ChunkResult
 from app.services.llm.base import DEFAULT_LLM_TIMEOUT_S, LLMProvider, LLMRateLimited, ProviderDefaults
 
-DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_MODEL = "gpt-6-sol"
 DEFAULT_RPM = 60
 DEFAULT_MAX_RETRIES = 2
 
@@ -36,16 +36,31 @@ class OpenAIProvider(LLMProvider):
             api_key=api_key, base_url=base_url, timeout=DEFAULT_LLM_TIMEOUT_S, max_retries=0
         )
         self.model = model
+        self.max_output_tokens = settings.max_llm_output_tokens
+        self.extra_body: dict[str, object] | None = None
 
     async def call_chunk(self, system: str, prompt: str) -> ChunkResult:
         try:
-            completion = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
+            request: dict[str, object] = {
+                "model": self.model,
+                "messages": [
                     {"role": "system", "content": system},
                     {"role": "user", "content": prompt},
                 ],
-                temperature=0.1,
+            }
+            if self.model.lower().startswith("gpt-6-"):
+                # GPT-6 reasoning models reject sampling parameters. Low effort
+                # suits the short, latency-sensitive incident-analysis answers.
+                request["reasoning_effort"] = "low"
+                request["max_completion_tokens"] = self.max_output_tokens
+            else:
+                request["temperature"] = 0.1
+                request["max_tokens"] = self.max_output_tokens
+            extra_body = getattr(self, "extra_body", None)
+            if extra_body:
+                request["extra_body"] = extra_body
+            completion = await self.client.chat.completions.create(  # type: ignore[arg-type]
+                **request,
             )
         except openai.RateLimitError as e:
             raise LLMRateLimited(str(e)) from e

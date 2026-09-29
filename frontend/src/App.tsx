@@ -22,7 +22,6 @@ function App() {
 
   useEffect(() => {
     setFacetSelection(EMPTY_LOG_FACETS)
-    setVisibleEvents([])
   }, [sourceDescription])
 
   return (

@@ -10,11 +10,28 @@ export const EMPTY_LOG_FACETS: LogFacetSelection = {
   level: [], method: [], route: [], status: [], exception: [], duration: [],
 }
 
+export const SIGNIFICANT_HTTP_STATUS_CODES = {
+  '1xx': [100, 101],
+  '2xx': [200, 201, 202, 204],
+  '3xx': [301, 302, 304, 307, 308],
+  '4xx': [400, 401, 403, 404, 408, 409, 422, 429],
+  '5xx': [500, 502, 503, 504],
+} as const
+
+const SIGNIFICANT_HTTP_STATUS_SET = new Set<string>(
+  Object.values(SIGNIFICANT_HTTP_STATUS_CODES).flat().map(String),
+)
+
+export function isSignificantHttpStatus(value: string) {
+  return SIGNIFICANT_HTTP_STATUS_SET.has(value)
+}
+
 const LEVEL_RE = /\b(TRACE|DEBUG|INFO|WARN(?:ING)?|ERROR|FATAL|CRITICAL)\b/i
 const METHOD_RE = /\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/i
 const REQUEST_RE = /\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+((?:https?:\/\/[^\s]+|\/[^\s?]*))/i
-const STATUS_RE = /(?:\bstatus(?:_code)?|http\.status_code|response\.status)\s*[=:]\s*["']?([1-5]\d{2})\b/i
-const FALLBACK_STATUS_RE = /\b([1-5]\d{2})\b/
+const STATUS_RE = /(?:\bstatus(?:[_ -]?code)?|http\.status_code|response\.status)\s*[=:]\s*["']?([1-5]\d{2})\b/i
+const HTTP_RESPONSE_STATUS_RE = /\bHTTP\/\d(?:\.\d)?["']?\s+([1-5]\d{2})\b/i
+const HTTP_REQUEST_STATUS_RE = /\b(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(?:https?:\/\/[^\s"']+|\/[^\s"']*)\s+(?:HTTP\/\d(?:\.\d)?["']?\s+)?([1-5]\d{2})\b/i
 const EXCEPTION_RE = /\b([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*(?:Exception|Error))\b/
 const DURATION_RE = /\b(?:duration|latency|elapsed|response[_-]?time)(?:_ms)?\s*[=:]\s*["']?(\d+(?:\.\d+)?)\s*(ms|s|sec|seconds?)?\b/i
 
@@ -91,7 +108,10 @@ export function extractLogFacets(event: LogEvent): ExtractedLogFacets {
   const rawLevel = field(fields, FIELD_NAMES.level) ?? event.message.match(LEVEL_RE)?.[1]
   const rawMethod = field(fields, FIELD_NAMES.method) ?? request?.[1] ?? event.message.match(METHOD_RE)?.[1]
   const rawRoute = field(fields, FIELD_NAMES.route) ?? request?.[2]
-  const rawStatus = field(fields, FIELD_NAMES.status) ?? event.message.match(STATUS_RE)?.[1] ?? event.message.match(FALLBACK_STATUS_RE)?.[1]
+  const rawStatus = field(fields, FIELD_NAMES.status)
+    ?? event.message.match(STATUS_RE)?.[1]
+    ?? event.message.match(HTTP_RESPONSE_STATUS_RE)?.[1]
+    ?? event.message.match(HTTP_REQUEST_STATUS_RE)?.[1]
   const rawException = field(fields, FIELD_NAMES.exception) ?? event.message.match(EXCEPTION_RE)?.[1]
 
   const level = rawLevel?.toUpperCase() === 'WARNING' ? 'WARN' : rawLevel?.toUpperCase()

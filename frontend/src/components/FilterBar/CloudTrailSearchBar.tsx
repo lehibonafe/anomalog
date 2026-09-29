@@ -1,5 +1,4 @@
 import { isAxiosError } from "axios";
-import { useState } from "react";
 
 import type { CloudTrailSearchRequest } from "../../api/types";
 import { useCloudTrailSearch } from "../../hooks/useCloudTrailSearch";
@@ -12,12 +11,8 @@ export function CloudTrailSearchBar() {
   const endTime = useSelectionStore((s) => s.endTime);
   const attributeKey = useSelectionStore((s) => s.cloudTrailAttributeKey);
   const attributeValue = useSelectionStore((s) => s.cloudTrailAttributeValue);
-  const loadedCount = useSelectionStore((s) => s.events.length);
 
   const search = useCloudTrailSearch();
-  // Snapshot of the request that produced the current cursor, so "Load more"
-  // keeps paging the same query even if the sidebar inputs change afterward.
-  const [lastRequest, setLastRequest] = useState<CloudTrailSearchRequest | null>(null);
 
   if (sourceMode !== "cloudtrail") {
     return null;
@@ -34,14 +29,8 @@ export function CloudTrailSearchBar() {
       lookup_attribute_key: attributeKey || null,
       lookup_attribute_value: attributeValue.trim() || null,
     };
-    setLastRequest(request);
     search.reset(); // drop any stale truncated/cursor state from a previous query
     search.mutate(request);
-  };
-
-  const loadMore = () => {
-    if (!lastRequest || !search.data?.cursor) return;
-    search.mutate({ ...lastRequest, cursor: search.data.cursor });
   };
 
   return (
@@ -61,22 +50,6 @@ export function CloudTrailSearchBar() {
             ? search.error.response?.data?.detail
             : "Search failed. Check the backend logs."}
         </p>
-      )}
-      {search.data?.cursor && (
-        <div className="load-more-row">
-          <p className="hint">
-            Showing {loadedCount.toLocaleString()} events · Continue loading to check for more results.
-          </p>
-          <button
-            type="button"
-            className="btn-block"
-            disabled={search.isPending}
-            onClick={loadMore}
-          >
-            {search.isPending && <span className="spinner dark" />}
-            {search.isPending ? "Loading..." : "Load more"}
-          </button>
-        </div>
       )}
     </div>
   );

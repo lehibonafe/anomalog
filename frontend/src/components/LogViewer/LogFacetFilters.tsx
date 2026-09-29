@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import type { LogEvent } from '../../api/types'
 import { facetColor } from '../../utils/facetColors'
-import { extractLogFacets, type LogFacetKey, type LogFacetSelection } from '../../utils/logFacets'
+import { extractLogFacets, isSignificantHttpStatus, type LogFacetKey, type LogFacetSelection } from '../../utils/logFacets'
 
 const FACET_DEFS: Array<{ key: LogFacetKey; label: string; limit?: number }> = [
   { key: 'level', label: 'Log level' },
@@ -21,12 +21,21 @@ interface LogFacetFiltersProps {
 
 export function LogFacetFilters({ events, selection, onChange }: LogFacetFiltersProps) {
   const [collapsed, setCollapsed] = useState<Set<LogFacetKey>>(new Set())
+
+  useEffect(() => {
+    const statuses = selection.status.filter(isSignificantHttpStatus)
+    if (statuses.length !== selection.status.length) {
+      onChange({ ...selection, status: statuses })
+    }
+  }, [onChange, selection])
+
   const counts = useMemo(() => {
     const result = Object.fromEntries(FACET_DEFS.map(({ key }) => [key, new Map<string, number>()])) as Record<LogFacetKey, Map<string, number>>
     for (const event of events) {
       const facets = extractLogFacets(event)
       for (const { key } of FACET_DEFS) {
         const value = facets[key]
+        if (key === 'status' && value && !isSignificantHttpStatus(value)) continue
         if (value) result[key].set(value, (result[key].get(value) ?? 0) + 1)
       }
     }

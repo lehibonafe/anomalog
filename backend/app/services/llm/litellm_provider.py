@@ -43,3 +43,9 @@ class LiteLLMProvider(OpenAIProvider):
             max_retries=0,
         )
         self.model = model
+        self.max_output_tokens = settings.max_llm_output_tokens
+        self.extra_body = (
+            {"enable_thinking": settings.litellm_enable_thinking}
+            if model.lower().split("/")[-1].startswith("qwen")
+            else None
+        )

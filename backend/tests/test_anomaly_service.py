@@ -99,8 +99,59 @@ async def test_analyze_with_user_prompt_reaches_llm_and_skips_prefilter(monkeypa
     )
 
     assert "count successful logins" in seen_prompts[0]
+    assert "app_visible_logs=3" in seen_prompts[0]
     assert result.lines_considered == 3
     assert result.lines_skipped_by_prefilter == 0
+
+
+async def test_custom_question_uses_question_aware_retrieval(monkeypatch):
+    settings = make_settings(chunk_size_lines=50, gemini_max_chunks_per_analysis=5)
+    service = AnomalyService(settings)
+    seen_prompts: list[str] = []
+
+    async def fake_call_chunk(self, system, prompt):
+        seen_prompts.append(prompt)
+        return ChunkResult(analysis="Account test logged in [50].")
+
+    monkeypatch.setattr(GeminiProvider, "call_chunk", fake_call_chunk)
+    events = [make_event(i, f"routine heartbeat sequence={i}") for i in range(100)]
+    events[50] = make_event(50, "user login succeeded account=test")
+
+    result = await service.analyze(
+        events,
+        AnalysisContext(source_description="test"),
+        provider="gemini",
+        user_prompt="Which account logged in successfully?",
+    )
+
+    assert result.lines_analyzed == 5
+    assert result.lines_skipped_by_prefilter == 95
+    assert "[50]" in seen_prompts[0]
+    assert "sequence=0" not in seen_prompts[0]
+
+
+async def test_duplicate_compression_reports_source_coverage(monkeypatch):
+    service = AnomalyService(make_settings())
+    received: list[LogEvent] = []
+
+    async def respond(chunk_events, *args):
+        received.extend(chunk_events)
+        return ChunkResult(analysis="Database timed out 10 times [0].")
+
+    monkeypatch.setattr(service, "_call_chunk", respond)
+    events = [
+        make_event(i, f"ERROR request_id=12345678{i} database timeout")
+        for i in range(10)
+    ]
+
+    result = await service.analyze(events, AnalysisContext(source_description="test"))
+
+    assert len(received) == 1
+    assert result.lines_analyzed == 10
+    assert result.lines_sent_to_model == 1
+    assert result.lines_collapsed_as_duplicates == 9
+    assert result.lines_omitted_by_limits == 0
+    assert result.estimated_input_tokens > 0
 
 
 async def test_analyze_includes_conversation_history_in_prompt(monkeypatch):
@@ -131,6 +182,30 @@ async def test_analyze_includes_conversation_history_in_prompt(monkeypatch):
     assert "what happened first" in seen_prompts[0]
     assert "a boom occurred at line 0" in seen_prompts[0]
     assert "what should we do next" in seen_prompts[0]
+
+
+async def test_analyze_trims_history_to_token_budget(monkeypatch):
+    settings = make_settings(max_chat_history_tokens=100)
+    service = AnomalyService(settings)
+
+    async def fake_call_chunk(self, system, prompt):
+        return ChunkResult(analysis="Reviewed logs.")
+
+    monkeypatch.setattr(GeminiProvider, "call_chunk", fake_call_chunk)
+    history = [
+        ChatMessage(role="user", content="old context " * 100),
+        ChatMessage(role="assistant", content="recent finding " * 100),
+    ]
+    result = await service.analyze(
+        [make_event(0, "ERROR boom")],
+        AnalysisContext(source_description="test"),
+        provider="gemini",
+        user_prompt="what happened?",
+        history=history,
+    )
+
+    assert result.history_messages_omitted == 1
+    assert any("Conversation history was compacted" in warning for warning in result.warnings)
 
 
 async def test_analyze_rejects_oversized_conversation_history():
@@ -178,7 +253,7 @@ async def test_analyze_returns_partial_findings_when_quota_hits_mid_run(monkeypa
 
     monkeypatch.setattr(service, "_call_chunk", flaky_call)
 
-    events = [make_event(i, "ERROR boom") for i in range(3)]
+    events = [make_event(i, f"ERROR boom code={i}") for i in range(3)]
     result = await service.analyze(events, AnalysisContext(source_description="test"))
 
     assert result.chunks_analyzed == 1
@@ -260,7 +335,7 @@ async def test_coverage_accounts_for_limits(monkeypatch, caps):
 
     monkeypatch.setattr(service, "_call_chunk", respond)
     result = await service.analyze(
-        [make_event(i, "ERROR boom") for i in range(8)],
+        [make_event(i, f"ERROR boom code={i}") for i in range(8)],
         AnalysisContext(source_description="test"),
     )
     assert result.lines_submitted == 8
@@ -281,7 +356,7 @@ async def test_coverage_accounts_for_failed_chunks_and_shortened_lines(monkeypat
 
     monkeypatch.setattr(service, "_call_chunk", respond)
     result = await service.analyze(
-        [make_event(i, "ERROR " + "x" * 50) for i in range(2)],
+        [make_event(i, f"ERROR code={i} " + "x" * 50) for i in range(2)],
         AnalysisContext(source_description="test"),
     )
     assert result.lines_submitted == 2
@@ -294,7 +369,7 @@ async def test_coverage_accounts_for_failed_chunks_and_shortened_lines(monkeypat
 @pytest.mark.parametrize("mode", ["empty", "filtered", "sampled", "custom"])
 async def test_coverage_totals_reconcile(monkeypatch, mode):
     service = AnomalyService(make_settings(max_analysis_lines=5))
-    events = [make_event(i, "normal operation") for i in range(10)]
+    events = [make_event(i, f"normal operation code={i}") for i in range(10)]
     if mode == "empty":
         events = []
     elif mode == "filtered":

@@ -31,6 +31,12 @@ def test_uses_settings_api_key_when_omitted():
     assert provider.client.api_key == "from-settings-key"
 
 
+def test_recommended_default_model():
+    defaults = LiteLLMProvider.resolve_defaults(make_settings())
+
+    assert defaults.model == "qwen3.8-flash"
+
+
 def test_overridden_api_key_wins_over_settings():
     settings = make_settings(litellm_api_key="from-settings-key")
     provider = make_provider(api_key="from-frontend-key", settings=settings)
@@ -64,6 +70,9 @@ async def test_call_chunk_returns_text_response():
     result = await provider.call_chunk("system prompt", "prompt")
 
     assert result.analysis == "line [0] looks fine."
+    request = provider.client.chat.completions.create.await_args.kwargs
+    assert request["extra_body"] == {"enable_thinking": False}
+    assert request["max_tokens"] == 2048
 
 
 async def test_call_chunk_raises_request_error_on_empty_response():

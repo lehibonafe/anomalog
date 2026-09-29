@@ -7,19 +7,25 @@ import { useSelectionStore } from "../state/selectionStore";
 export function useCloudTrailSearch() {
   const setEvents = useSelectionStore((s) => s.setEvents);
   const appendEvents = useSelectionStore((s) => s.appendEvents);
+  const setCloudTrailNextRequest = useSelectionStore((s) => s.setCloudTrailNextRequest);
 
   return useMutation({
     mutationFn: (request: CloudTrailSearchRequest) => searchCloudTrailEvents(request),
+    onMutate: (variables) => {
+      if (!variables.cursor) setCloudTrailNextRequest(null);
+    },
     onSuccess: (data, variables) => {
       if (variables.cursor) {
         appendEvents(data.events);
-        return;
+      } else {
+        const attrPart = variables.lookup_attribute_key
+          ? `, ${variables.lookup_attribute_key}=${variables.lookup_attribute_value}`
+          : "";
+        const description = `CloudTrail (${variables.start_time} → ${variables.end_time}${attrPart})`;
+        setEvents(data.events, description);
       }
-      const attrPart = variables.lookup_attribute_key
-        ? `, ${variables.lookup_attribute_key}=${variables.lookup_attribute_value}`
-        : "";
-      const description = `CloudTrail (${variables.start_time} → ${variables.end_time}${attrPart})`;
-      setEvents(data.events, description);
+
+      setCloudTrailNextRequest(data.cursor ? { ...variables, cursor: data.cursor } : null);
     },
   });
 }

@@ -12,6 +12,20 @@ server-configured key/model/base URL) plus **Gemini**, **OpenAI**,
 **Anthropic**, and **Ollama** (local), each opt-in per request via the UI's
 Model settings. Only the LiteLLM key is required to boot.
 
+Recommended defaults balance investigation quality, latency, and cost:
+
+| Provider | Default model |
+|----------|---------------|
+| LiteLLM | `qwen3.8-flash` |
+| Gemini | `gemini-3.8-flash` |
+| OpenAI | `gpt-6-sol` |
+| Anthropic | `claude-sonnet-5` |
+| Ollama | `qwen3.5:9b` |
+
+The model field in the UI may override these values per request. Gemini and
+LiteLLM defaults may also be changed server-side with `GEMINI_MODEL` and
+`LITELLM_MODEL`.
+
 ## Architecture
 
 - `backend/` — FastAPI service. Talks to AWS (boto3) and the LLM provider SDKs.
@@ -38,12 +52,29 @@ failure), or local regex masking only otherwise. This isn't configurable per
 request; it always runs.
 
 LLM free tiers have real rate/quota limits, so before any log slice is sent to
-a model the backend prefilters for errors/exceptions/stack traces, caps total
+a model the backend prefilters for errors/exceptions/stack traces, significant
+HTTP statuses (`401`, `403`, `408`, `429`, and `5xx`), caps total
 lines/characters, and chunks + paces requests per provider (see
-`backend/app/services/log_filter.py` and `anomaly_service.py`). When you
-supply a custom prompt, the error-keyword prefilter is skipped — otherwise it
-could drop the very lines your prompt asks about — but the caps and pacing
-still apply.
+`backend/app/services/log_filter.py` and `anomaly_service.py`). Custom prompts
+use their own query-aware selector, with an anomaly-focused fallback when the
+question has no direct lexical matches.
+
+Focused investigator questions use question-aware retrieval with nearby context
+instead of sending every visible row. Before each model call, JSON messages are
+minified without dropping fields, equivalent repetitive entries are represented
+by a counted source line, recognized HTTP/service totals are calculated locally,
+conversation history is trimmed to a token budget, and the total evidence
+payload is capped with a conservative tokenizer-independent estimate. The
+response's analysis notes show source-log coverage, compact evidence rows, and
+estimated input tokens.
+
+The relevant backend controls are `MAX_ANALYSIS_TOKENS` (default `40000`),
+`MAX_CHAT_HISTORY_TOKENS` (default `4000`), and `MAX_LLM_OUTPUT_TOKENS`
+(default `2048`). LiteLLM Qwen reasoning is disabled by default through
+`LITELLM_ENABLE_THINKING=false`. Gemini 3 uses
+`GEMINI_THINKING_LEVEL=low` for latency-sensitive log analysis; the legacy
+`GEMINI_THINKING_BUDGET` setting applies only when explicitly selecting a
+Gemini 2.5 model.
 
 ## Setup
 
@@ -82,6 +113,9 @@ Or from the repo root, run both at once:
 ./dev.sh
 ```
 
+Press Ctrl+C once to stop both services, including their reload worker
+processes.
+
 Then open http://localhost:5173.
 
 ### Or with Docker
@@ -111,10 +145,12 @@ Then open http://localhost:5173.
    choose **Start Live Tail**. Review the AWS cost confirmation before starting;
    the session stops after 15 minutes without user activity or immediately
    when the page disconnects.
-3. Filter Log details as needed, then select **Generate summary** in the AI
-   log summary card. Only the currently visible rows are analyzed; hidden and
-   unloaded rows are excluded. The AI result is one evidence-linked sentence.
-4. Select any cited line number in the summary to scroll to and highlight the
+3. Filter Log details as needed, then ask a specific question in the **AI Log
+   Investigator**, such as “Who shut down the EC2 instance?” or “Which service
+   has the most 5xx errors?” Only currently visible rows are analyzed; hidden
+   and unloaded rows are excluded. Follow-up questions retain the conversation
+   context.
+4. Select any cited line number in an answer to scroll to and highlight the
    supporting evidence in the log viewer.
 5. To use Gemini/OpenAI/Anthropic/Ollama instead of the server's LiteLLM
    proxy, open **Model settings** in the app header and supply a
@@ -132,13 +168,22 @@ a **Load more** action.
 2. Optionally enter a CloudWatch Logs filter pattern.
 3. Select **Start Live Tail** and review the confirmation dialog. No AWS session
    starts until you confirm.
-4. Select **Stop Live Tail** when the investigation is complete.
+4. Select **Pause display** to temporarily hold incoming events out of the log
+   viewer. Select **Resume** to append the buffered events.
+5. Select **Stop Live Tail** when the investigation is complete.
 
 When AWS confirms the session, Anomalog replaces the currently displayed logs
 with the new live stream. Historical search, filter-pattern editing, and
 pagination controls remain disabled until Live Tail stops. Closing the page,
 switching away from the CloudWatch interface, or losing the browser connection
 closes the backend AWS response stream.
+
+Pausing affects the browser display only: the AWS session remains connected and
+billable, the elapsed timer continues, and the normal inactivity timeout still
+applies. The browser buffers up to 5,000 events while paused. Resuming appends
+the retained events to the viewer; if the buffer fills, the oldest paused
+events are discarded and the session panel reports how many were lost. Stopping
+while paused flushes the retained buffer before closing the AWS stream.
 
 The session panel shows:
 
@@ -175,22 +220,25 @@ Every received live event is appended to the same log store used by the
 analytics dashboard. The HTTP status cards and trend chart therefore update
 automatically while Live Tail is active:
 
-| Range | Meaning | Color |
-|-------|---------|-------|
-| `1xx` | Informational | Purple |
-| `2xx` | Success | Green |
-| `3xx` | Redirection | Blue |
-| `4xx` | Client Error | Amber |
-| `5xx` | Server Error | Red |
+| Range | Included codes | Meaning | Color |
+|-------|----------------|---------|-------|
+| `1xx` | `100`, `101` | Informational | Purple |
+| `2xx` | `200`, `201`, `202`, `204` | Success | Green |
+| `3xx` | `301`, `302`, `304`, `307`, `308` | Redirection | Blue |
+| `4xx` | `400`, `401`, `403`, `404`, `408`, `409`, `422`, `429` | Client Error | Amber |
+| `5xx` | `500`, `502`, `503`, `504` | Server Error | Red |
 
-The overview recognizes standalone three-digit values from `100` through `599`
-in the masked log message. Each event is counted once in every status class it
-contains, so one message containing both `401` and `500` contributes to both
-cards. Numbers outside that range are ignored. Because the overview also uses a
-plain-number fallback, an unrelated standalone number such as `404` can be
-interpreted as an HTTP status; structured fields such as `status_code`,
-`http.status_code`, and `response.status` are preferred for accurate facet
-filtering.
+The overview and **Log facets → Status** grid share the same status extractor
+and curated code set, so their counts reconcile. The extractor prefers
+structured fields such as `status_code`, `http.status_code`, and
+`response.status`; otherwise it uses the first status-like standalone number
+in the message. Each event contributes to at most one HTTP status. Other codes
+in the same ranges are ignored.
+
+The raw log viewer continues to retain every loaded event.
+Selecting an HTTP status card filters the raw logs and volume graph and shows
+only that status family's series in the HTTP trend graph. Selecting the active
+card again restores all series.
 
 The separate **Status** card counts operational words such as `Succeeded`,
 `Started`, `Failed`, and `Resolved`; it is not the HTTP status-code count.

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "r
 import { List, useDynamicRowHeight, useListRef, type RowComponentProps } from "react-window";
 
 import type { LogEvent } from "../../api/types";
+import { useCloudTrailSearch } from "../../hooks/useCloudTrailSearch";
+import { useCloudWatchSearch } from "../../hooks/useCloudWatchSearch";
 import { useSelectionStore } from "../../state/selectionStore";
 import { splitHighlighted, type Finding } from "../../utils/findings";
 import { facetColor } from "../../utils/facetColors";
@@ -246,11 +248,16 @@ export function LogViewer({
   onVisibleEventsChange,
 }: LogViewerProps) {
   const events = useSelectionStore((s) => s.events);
+  const sourceMode = useSelectionStore((s) => s.sourceMode);
   const sourceDescription = useSelectionStore((s) => s.sourceDescription);
   const highlightedRange = useSelectionStore((s) => s.highlightedRange);
   const setHighlightedRange = useSelectionStore((s) => s.setHighlightedRange);
   const startTime = useSelectionStore((s) => s.startTime);
   const endTime = useSelectionStore((s) => s.endTime);
+  const cloudWatchNextRequest = useSelectionStore((s) => s.cloudWatchNextRequest);
+  const cloudTrailNextRequest = useSelectionStore((s) => s.cloudTrailNextRequest);
+  const loadMoreCloudWatch = useCloudWatchSearch();
+  const loadMoreCloudTrail = useCloudTrailSearch();
   const listRef = useListRef(null);
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [keyword, setKeyword] = useState("");
@@ -280,7 +287,9 @@ export function LogViewer({
 
   const filteredEvents = useMemo(
     () => activeFinding
-      ? keywordFilteredEvents.filter((event) => activeFinding.regex.test(event.message))
+      ? keywordFilteredEvents.filter((event) => (
+          activeFinding.matches?.(event) ?? activeFinding.regex.test(event.message)
+        ))
       : keywordFilteredEvents,
     [keywordFilteredEvents, activeFinding],
   );
@@ -333,14 +342,45 @@ export function LogViewer({
     }
   };
 
+  const nextPage = sourceMode === "cloudwatch"
+    ? cloudWatchNextRequest
+    : cloudTrailNextRequest;
+  const pagination = sourceMode === "cloudwatch" ? loadMoreCloudWatch : loadMoreCloudTrail;
+  const loadNextPage = () => {
+    if (sourceMode === "cloudwatch" && cloudWatchNextRequest) {
+      loadMoreCloudWatch.mutate(cloudWatchNextRequest);
+    } else if (sourceMode === "cloudtrail" && cloudTrailNextRequest) {
+      loadMoreCloudTrail.mutate(cloudTrailNextRequest);
+    }
+  };
+  const paginationFooter = nextPage ? (
+    <div className="log-pagination-footer">
+      <span>
+        {events.length.toLocaleString()} {sourceMode === "cloudwatch" ? "logs" : "events"} loaded
+        {pagination.isError && <small role="alert">Could not load more. Try again.</small>}
+      </span>
+      <button
+        type="button"
+        disabled={pagination.isPending}
+        onClick={loadNextPage}
+      >
+        {pagination.isPending && <span className="spinner dark" />}
+        {pagination.isPending ? "Loading more…" : `Load more ${sourceMode === "cloudwatch" ? "logs" : "events"}`}
+      </button>
+    </div>
+  ) : null;
+
   if (events.length === 0) {
     return (
-      <div className="log-viewer-empty">
-        <span className="empty-icon">☰</span>
-        <span className="empty-title">No logs loaded</span>
-        <span className="empty-subtitle">
-          Pick a source and time range on the left, then search or load objects to begin.
-        </span>
+      <div className="log-viewer-panel">
+        <div className="log-viewer-empty">
+          <span className="empty-icon">☰</span>
+          <span className="empty-title">No logs loaded</span>
+          <span className="empty-subtitle">
+            Pick a source and time range on the left, then search or load objects to begin.
+          </span>
+        </div>
+        {paginationFooter}
       </div>
     );
   }
@@ -425,6 +465,7 @@ export function LogViewer({
           />
         </div>
       )}
+      {paginationFooter}
     </div>
   );
 }

@@ -7,7 +7,7 @@ import pytest
 from app.config import Settings
 from app.core.errors import BadRequestError, LLMRequestError
 from app.services.llm.base import LLMRateLimited
-from app.services.llm.anthropic_provider import AnthropicProvider
+from app.services.llm.anthropic_provider import DEFAULT_MODEL, AnthropicProvider
 
 
 def make_settings(**overrides) -> Settings:
@@ -17,7 +17,7 @@ def make_settings(**overrides) -> Settings:
 def make_provider(api_key: str | None = "test-anthropic-key") -> AnthropicProvider:
     settings = make_settings()
     return AnthropicProvider(
-        api_key=api_key, model="claude-haiku-4-5-20251001", base_url=None, settings=settings
+        api_key=api_key, model=DEFAULT_MODEL, base_url=None, settings=settings
     )
 
 
@@ -30,6 +30,12 @@ def make_rate_limit_error() -> anthropic.RateLimitError:
 def test_requires_api_key():
     with pytest.raises(BadRequestError):
         make_provider(api_key=None)
+
+
+def test_recommended_default_model():
+    defaults = AnthropicProvider.resolve_defaults(make_settings())
+
+    assert defaults.model == "claude-sonnet-5"
 
 
 async def test_call_chunk_returns_text_from_text_block():

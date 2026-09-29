@@ -2,17 +2,31 @@ import { useMemo } from 'react'
 
 import type { LogEvent } from '../../api/types'
 import type { Finding, FindingSeverity } from '../../utils/findings'
-import type { LogFacetSelection } from '../../utils/logFacets'
+import { extractLogFacets, SIGNIFICANT_HTTP_STATUS_CODES, type LogFacetSelection } from '../../utils/logFacets'
 import { formatSingaporeDateTime } from '../../utils/time'
 import { LogFacetFilters } from './LogFacetFilters'
 
+function statusCodesRegex(codes: readonly number[]) {
+  return new RegExp(`\\b(?:${codes.join('|')})\\b`)
+}
+
+function httpStatusDefinition(
+  code: string,
+  label: string,
+  color: string,
+  codes: readonly number[],
+  severity: FindingSeverity,
+) {
+  return { code, label, color, codes, regex: statusCodesRegex(codes), severity }
+}
+
 const HTTP_STATUS_DEFS = [
-  { code: '1xx', label: 'Info', color: 'var(--status-1xx)', regex: /\b1\d{2}\b/, severity: 'info' },
-  { code: '2xx', label: 'Success', color: 'var(--status-2xx)', regex: /\b2\d{2}\b/, severity: 'info' },
-  { code: '3xx', label: 'Redirection', color: 'var(--status-3xx)', regex: /\b3\d{2}\b/, severity: 'info' },
-  { code: '4xx', label: 'Client Error', color: 'var(--status-4xx)', regex: /\b4\d{2}\b/, severity: 'warning' },
-  { code: '5xx', label: 'Server Error', color: 'var(--status-5xx)', regex: /\b5\d{2}\b/, severity: 'critical' },
-] as const
+  httpStatusDefinition('1xx', 'Info', 'var(--status-1xx)', SIGNIFICANT_HTTP_STATUS_CODES['1xx'], 'info'),
+  httpStatusDefinition('2xx', 'Success', 'var(--status-2xx)', SIGNIFICANT_HTTP_STATUS_CODES['2xx'], 'info'),
+  httpStatusDefinition('3xx', 'Redirection', 'var(--status-3xx)', SIGNIFICANT_HTTP_STATUS_CODES['3xx'], 'info'),
+  httpStatusDefinition('4xx', 'Client Error', 'var(--status-4xx)', SIGNIFICANT_HTTP_STATUS_CODES['4xx'], 'warning'),
+  httpStatusDefinition('5xx', 'Server Error', 'var(--status-5xx)', SIGNIFICANT_HTTP_STATUS_CODES['5xx'], 'critical'),
+]
 
 const STATUS_DEFS = [
   { label: 'Succeeded', color: 'var(--severity-success)', regex: /\b(succeed(?:ed)?|success(?:ful)?)\b/i, severity: 'info' as const },
@@ -45,8 +59,9 @@ function toggleFinding(
   severity: FindingSeverity,
   activeFindingId: string | null,
   onSelectFinding: (finding: Finding | null) => void,
+  matches?: (event: LogEvent) => boolean,
 ) {
-  onSelectFinding(activeFindingId === id ? null : { id, label, regex, severity })
+  onSelectFinding(activeFindingId === id ? null : { id, label, regex, severity, matches })
 }
 
 function eventDate(event: LogEvent) {
@@ -54,9 +69,18 @@ function eventDate(event: LogEvent) {
   return value && !Number.isNaN(value.getTime()) ? value : null
 }
 
+function hasHttpStatus(event: LogEvent, codes: readonly number[]) {
+  const status = extractLogFacets(event).status
+  return status !== undefined && codes.some((code) => String(code) === status)
+}
+
 function LineChart({ events, activeFindingId, onSelectFinding }: InteractiveChartProps) {
+  const eventsWithStatus = useMemo(() => events.map((event) => ({
+    event,
+    status: extractLogFacets(event).status,
+  })), [events])
   const series = useMemo(() => {
-    const dated = events.map((event) => ({ event, date: eventDate(event) })).filter((item) => item.date) as Array<{ event: LogEvent; date: Date }>
+    const dated = eventsWithStatus.map(({ event, status }) => ({ event, status, date: eventDate(event) })).filter((item) => item.date) as Array<{ event: LogEvent; status: string | undefined; date: Date }>
     if (!dated.length) return {
       labels: [],
       statuses: HTTP_STATUS_DEFS.map((status) => ({ ...status, values: Array<number>(12).fill(0) })),
@@ -65,10 +89,12 @@ function LineChart({ events, activeFindingId, onSelectFinding }: InteractiveChar
     const end = Math.max(...dated.map((item) => item.date.getTime()))
     const span = Math.max(1, end - start)
     const buckets = Array.from({ length: 12 }, () => Array<number>(HTTP_STATUS_DEFS.length).fill(0))
-    dated.forEach(({ event, date }) => {
+    dated.forEach(({ status: eventStatus, date }) => {
       const index = Math.min(11, Math.floor(((date.getTime() - start) / span) * 12))
       HTTP_STATUS_DEFS.forEach((status, statusIndex) => {
-        if (status.regex.test(event.message)) buckets[index][statusIndex] += 1
+        if (eventStatus && status.codes.some((code) => String(code) === eventStatus)) {
+          buckets[index][statusIndex] += 1
+        }
       })
     })
     return {
@@ -78,13 +104,22 @@ function LineChart({ events, activeFindingId, onSelectFinding }: InteractiveChar
         values: buckets.map((bucket) => bucket[statusIndex]),
       })),
     }
-  }, [events])
+  }, [eventsWithStatus])
   const statusTotals = useMemo(() => HTTP_STATUS_DEFS.map((status) => ({
     ...status,
-    count: events.filter((event) => status.regex.test(event.message)).length,
-  })), [events])
+    count: eventsWithStatus.filter(({ status: eventStatus }) => (
+      eventStatus && status.codes.some((code) => String(code) === eventStatus)
+    )).length,
+  })), [eventsWithStatus])
 
-  const max = Math.max(1, ...series.statuses.flatMap((status) => status.values))
+  const selectedStatus = series.statuses.find(
+    (status) => `dashboard-${status.code}` === activeFindingId,
+  )
+  const displayedStatuses = selectedStatus ? [selectedStatus] : series.statuses
+  const plottedStatuses = displayedStatuses.filter(
+    (status) => status.values.some((value) => value > 0),
+  )
+  const max = Math.max(1, ...plottedStatuses.flatMap((status) => status.values))
   const points = (values: number[]) => values.map((value, index) => `${28 + index * 62},${176 - (value / max) * 138}`).join(' ')
 
   return (
@@ -92,7 +127,7 @@ function LineChart({ events, activeFindingId, onSelectFinding }: InteractiveChar
       <div className="comparison-summary">
         {statusTotals.map((status) => {
           const id = `dashboard-${status.code}`
-          return <button type="button" key={status.code} className={activeFindingId === id ? 'active' : ''} aria-pressed={activeFindingId === id} onClick={() => toggleFinding(id, `${status.code} - ${status.label}`, status.regex, status.severity, activeFindingId, onSelectFinding)}><span style={{ color: status.color }}>{status.code} - {status.label}</span><strong>{status.count.toLocaleString()}</strong></button>
+          return <button type="button" key={status.code} className={activeFindingId === id ? 'active' : ''} aria-pressed={activeFindingId === id} onClick={() => toggleFinding(id, `${status.code} - ${status.label}`, status.regex, status.severity, activeFindingId, onSelectFinding, (event) => hasHttpStatus(event, status.codes))}><span style={{ color: status.color }}>{status.code} - {status.label}</span><strong>{status.count.toLocaleString()}</strong><small>{status.codes.join(', ')}</small></button>
         })}
       </div>
       <svg viewBox="0 0 740 210" role="img" aria-label="HTTP status code trends over time">
@@ -100,8 +135,11 @@ function LineChart({ events, activeFindingId, onSelectFinding }: InteractiveChar
         <text x="4" y="42" className="chart-y-label">{max}</text>
         <text x="4" y="110" className="chart-y-label">{Math.round(max / 2)}</text>
         <text x="14" y="180" className="chart-y-label">0</text>
-        {series.statuses.map((status) => <polyline key={status.code} points={points(status.values)} className="line-series" style={{ stroke: status.color }} />)}
-        {series.statuses.flatMap((status) => status.values.map((value, index) => <circle key={`${status.code}-${index}`} cx={28 + index * 62} cy={176 - (value / max) * 138} r="3.2" className="status-code-dot" style={{ fill: status.color }}><title>{status.code} {status.label}: {value}</title></circle>))}
+        {plottedStatuses.length === 0 && (
+          <text x="369" y="110" className="chart-empty-message">No matching HTTP status events</text>
+        )}
+        {plottedStatuses.map((status) => <polyline key={status.code} points={points(status.values)} className="line-series" style={{ stroke: status.color }} />)}
+        {plottedStatuses.flatMap((status) => status.values.map((value, index) => <circle key={`${status.code}-${index}`} cx={28 + index * 62} cy={176 - (value / max) * 138} r="3.2" className="status-code-dot" style={{ fill: status.color }}><title>{status.code} {status.label}: {value}</title></circle>))}
       </svg>
       <div className="chart-axis">{series.labels.map((label) => <span key={label}>{label}</span>)}</div>
     </div>

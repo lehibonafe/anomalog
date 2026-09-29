@@ -31,16 +31,22 @@ secure `wss://` URL automatically.
 - **Historical search:** uses the selected time range and supports cursor-based
   **Load more** pagination.
 - **Log analytics:** updates from the events currently loaded in the browser.
-  HTTP status cards count `1xx` through `5xx`, using the status-code color
-  scheme documented in the root README.
+  HTTP status cards count a curated set of significant codes within `1xx`
+  through `5xx`, display the included codes, and filter the raw logs when
+  selected. Cards and facets use the same structured-field-first status
+  extractor so their counts agree. A selected card also isolates its series in
+  the HTTP trend graph. The exact code set is documented in the root README.
 - **Log facets:** extract level, method, route, HTTP status, exception, and
-  duration fields. Selecting a facet filters and highlights matching logs.
-- **AI log summary:** becomes available when at least one log is listed. Line
-  and range citations in a result are clickable and navigate to the referenced
-  logs.
+  duration fields. The Status grid shows only the curated significant codes;
+  its colors match the HTTP overview, and selecting a facet filters and
+  highlights matching logs.
+- **AI Log Investigator:** answers specific questions about the visible logs
+  and carries context into follow-up questions. Line and range citations in an
+  answer are clickable and navigate to the referenced logs.
 - **Model settings:** opens as a modal from the right side of the app header.
-  LiteLLM is the default provider and its default server model is
-  `qwen3.8-flash`.
+  LiteLLM is the default provider. Recommended defaults are `qwen3.8-flash`
+  for LiteLLM, `gemini-3.8-flash` for Gemini, `gpt-6-sol` for OpenAI,
+  `claude-sonnet-5` for Anthropic, and `qwen3.5:9b` for Ollama.
 
 ## Live Tail UI
 
@@ -53,6 +59,12 @@ appends masked live events. The event counter, elapsed timer, estimated cost,
 facets, HTTP status cards, and analytics graph update as events arrive. AWS
 sampling is shown as a warning because sampled counts are not exhaustive.
 
+**Pause display** keeps the WebSocket and billable AWS session active while
+holding up to 5,000 incoming events in the browser. **Resume** appends the
+retained events to the viewer. When that buffer fills, the oldest paused events
+are discarded and the UI reports the loss. Stopping a paused session flushes
+the retained buffer before closing the stream.
+
 User activity is sent to the backend at most once every 30 seconds. The socket
 is closed when the component unmounts or the page unloads. The backend remains
 authoritative for inactivity timeouts, concurrency limits, stream closure, and
@@ -62,8 +74,8 @@ masking.
 
 ```bash
 npm run lint
+npm test
 npm run build
 ```
 
-The project currently has no frontend test runner, so both commands are
-required after UI changes.
+Run all three commands after UI changes.

@@ -7,16 +7,18 @@ import pytest
 from app.config import Settings
 from app.core.errors import BadRequestError, LLMRequestError
 from app.services.llm.base import LLMRateLimited
-from app.services.llm.openai_provider import OpenAIProvider
+from app.services.llm.openai_provider import DEFAULT_MODEL, OpenAIProvider
 
 
 def make_settings(**overrides) -> Settings:
     return Settings(gemini_api_key="test-key", litellm_api_key="test-litellm-key", **overrides)
 
 
-def make_provider(api_key: str | None = "test-openai-key") -> OpenAIProvider:
+def make_provider(
+    api_key: str | None = "test-openai-key", model: str = DEFAULT_MODEL
+) -> OpenAIProvider:
     settings = make_settings()
-    return OpenAIProvider(api_key=api_key, model="gpt-4o-mini", base_url=None, settings=settings)
+    return OpenAIProvider(api_key=api_key, model=model, base_url=None, settings=settings)
 
 
 def make_rate_limit_error() -> openai.RateLimitError:
@@ -28,6 +30,12 @@ def make_rate_limit_error() -> openai.RateLimitError:
 def test_requires_api_key():
     with pytest.raises(BadRequestError):
         make_provider(api_key=None)
+
+
+def test_recommended_default_model():
+    defaults = OpenAIProvider.resolve_defaults(make_settings())
+
+    assert defaults.model == "gpt-6-sol"
 
 
 async def test_call_chunk_returns_text_result():
@@ -42,6 +50,25 @@ async def test_call_chunk_returns_text_result():
     result = await provider.call_chunk("system prompt", "prompt")
 
     assert result.analysis == "line [0] looks fine."
+    request = provider.client.chat.completions.create.await_args.kwargs
+    assert "extra_body" not in request
+    assert "temperature" not in request
+    assert request["reasoning_effort"] == "low"
+    assert request["max_completion_tokens"] == 2048
+
+
+async def test_legacy_model_keeps_sampling_and_max_tokens():
+    provider = make_provider(model="gpt-4o-mini")
+    fake_message = MagicMock(refusal=None, content="legacy response")
+    fake_completion = MagicMock()
+    fake_completion.choices = [MagicMock(message=fake_message)]
+    provider.client.chat.completions.create = AsyncMock(return_value=fake_completion)
+
+    await provider.call_chunk("system prompt", "prompt")
+
+    request = provider.client.chat.completions.create.await_args.kwargs
+    assert request["temperature"] == 0.1
+    assert request["max_tokens"] == 2048
 
 
 async def test_call_chunk_raises_request_error_on_refusal():

@@ -252,8 +252,8 @@ Orchestration (provider-agnostic, must not change per-provider) lives in
 `gemini_service.py`/`GeminiAnomalyService`):
 
 1. `log_filter.select_relevant` — regex-prefilters for
-   `ERROR|WARN|FATAL|EXCEPTION|TRACEBACK|5xx|timeout|refused|denied` plus
-   stack-frame patterns, keeping ±2 lines of context; falls back to even
+   `ERROR|WARN|FATAL|EXCEPTION|TRACEBACK|401|403|408|429|5xx|timeout|refused|denied`
+   plus stack-frame patterns, keeping ±2 lines of context; falls back to even
    sampling if nothing matches (so quiet logs still get scanned). **Skipped
    entirely when the request carries a `user_prompt`** — the regex is tuned to
    the anomaly scan and could drop the very lines a custom request asks about;

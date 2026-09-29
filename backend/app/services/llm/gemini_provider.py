@@ -32,13 +32,30 @@ class GeminiProvider(LLMProvider):
             http_options=types.HttpOptions(timeout=int(DEFAULT_LLM_TIMEOUT_S * 1000)),
         )
         self.model = model
+        self.thinking_budget = settings.gemini_thinking_budget
+        self.thinking_level = settings.gemini_thinking_level
+        self.max_output_tokens = settings.max_llm_output_tokens
 
     async def call_chunk(self, system: str, prompt: str) -> ChunkResult:
         try:
+            config: dict[str, object] = {
+                "system_instruction": system,
+                "max_output_tokens": self.max_output_tokens,
+            }
+            if self.model.lower().startswith("gemini-3"):
+                config["thinking_config"] = types.ThinkingConfig(
+                    thinking_level=self.thinking_level
+                )
+            else:
+                config["temperature"] = 0.1
+                config["thinking_config"] = types.ThinkingConfig(
+                    thinking_budget=self.thinking_budget
+                )
+
             resp = await self.client.aio.models.generate_content(
                 model=self.model,
                 contents=prompt,
-                config=types.GenerateContentConfig(temperature=0.1, system_instruction=system),
+                config=types.GenerateContentConfig(**config),
             )
             return ChunkResult(analysis=resp.text)
         except genai.errors.ClientError as e:

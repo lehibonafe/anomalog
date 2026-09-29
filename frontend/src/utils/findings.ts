@@ -7,6 +7,7 @@ export interface Finding {
   label: string;
   regex: RegExp;
   severity: FindingSeverity;
+  matches?: (event: LogEvent) => boolean;
 }
 
 // Kept in priority order (critical first) — a line's overall severity tint uses

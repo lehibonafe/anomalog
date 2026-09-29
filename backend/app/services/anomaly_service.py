@@ -1,5 +1,5 @@
 import asyncio
-import re
+import json
 from functools import lru_cache
 
 from app.config import Settings, get_settings
@@ -15,7 +15,7 @@ from app.schemas.analysis import (
 from app.schemas.common import LogEvent
 from app.services import log_filter
 from app.services.llm.base import LLMProvider, LLMRateLimited, ProviderDefaults
-from app.services.llm.prompt_v5 import (
+from app.services.llm.prompt_v6 import (
     REDUCTION_SYSTEM_PROMPT,
     SYSTEM_PROMPT,
     build_prompt,
@@ -25,78 +25,51 @@ from app.services.llm.registry import PROVIDERS, get_provider_class
 from app.services.masking import mask_message
 
 
-_OUTPUT_HEADING_RE = re.compile(
-    r'^(?:(?:#{1,6}|\*{1,2})\s*)?'
-    r'(?:summary|key findings|likely impact|recommended next steps|evidence gaps)'
-    r'(?:\*{1,2})?\s*:?\s*',
-    re.IGNORECASE,
-)
-_LIST_PREFIX_RE = re.compile(r'^(?:[-*•]\s+|\d+[.)]\s+)')
-_SEVERITY_RE = re.compile(r'^[\[(]?(CRITICAL|HIGH|MEDIUM|LOW|INFO)\b', re.IGNORECASE)
-_SEVERITY_RANK = {
-    'CRITICAL': 5,
-    'HIGH': 4,
-    'MEDIUM': 3,
-    'LOW': 2,
-    'INFO': 1,
-}
-_ABBREVIATIONS = {'e.g.', 'i.e.', 'etc.', 'vs.', 'approx.', 'u.s.'}
-_CLOSING_PUNCTUATION = '\'’”)]}'
-_MAX_RESULT_WORDS = 30
+def _truncate_middle(value: str, max_chars: int) -> str:
+    if len(value) <= max_chars:
+        return value
+    if max_chars <= 5:
+        return value[:max_chars]
+    half = (max_chars - 5) // 2
+    return value[:half] + " ... " + value[-half:]
 
 
-def _first_sentence_end(text: str) -> int | None:
-    for index, char in enumerate(text):
-        if char not in '.!?':
+def _trim_history(
+    history: list[ChatMessage], token_budget: int
+) -> tuple[list[ChatMessage], int, bool]:
+    """Keep the newest complete turns within a conservative token budget."""
+    if not history:
+        return [], 0, False
+    if token_budget <= 0:
+        return [], len(history), False
+
+    remaining = token_budget
+    kept_reversed: list[ChatMessage] = []
+    omitted = 0
+    content_shortened = False
+    for index in range(len(history) - 1, -1, -1):
+        message = history[index]
+        cost = log_filter.estimate_tokens(f"{message.role}: {message.content}") + 4
+        if cost <= remaining:
+            kept_reversed.append(message)
+            remaining -= cost
             continue
-        next_index = index + 1
-        while next_index < len(text) and text[next_index] in _CLOSING_PUNCTUATION:
-            next_index += 1
-        if next_index < len(text) and not text[next_index].isspace():
-            continue
-        token_start = text.rfind(' ', 0, index) + 1
-        token = text[token_start : index + 1].lower().lstrip('([\'“')
-        if char == '.' and token in _ABBREVIATIONS:
-            continue
-        return next_index
-    return None
 
+        omitted = index + 1
+        if not kept_reversed:
+            max_chars = max(0, remaining * 3 - len(message.role) - 8)
+            if max_chars:
+                kept_reversed.append(
+                    message.model_copy(
+                        update={"content": _truncate_middle(message.content, max_chars)}
+                    )
+                )
+                omitted -= 1
+                content_shortened = True
+        break
 
-def _normalize_one_sentence(text: str) -> str:
-    sentence = ' '.join(text.split()).strip()
-    if not sentence:
-        return ''
-
-    while True:
-        without_heading = _OUTPUT_HEADING_RE.sub('', sentence, count=1).strip()
-        if without_heading == sentence:
-            break
-        sentence = without_heading
-    sentence = _LIST_PREFIX_RE.sub('', sentence, count=1).strip()
-
-    end = _first_sentence_end(sentence)
-    if end is not None:
-        sentence = sentence[:end].strip()
-    else:
-        sentence = sentence.rstrip(' ,;:-')
-
-    words = sentence.split()
-    if len(words) > _MAX_RESULT_WORDS:
-        sentence = ' '.join(words[:_MAX_RESULT_WORDS]).rstrip(' ,;:.!?') + '.'
-    return sentence
-
-
-def _select_best_analysis(analyses: list[str]) -> str:
-    candidates = [_normalize_one_sentence(analysis) for analysis in analyses]
-    candidates = [candidate for candidate in candidates if candidate]
-    if not candidates:
-        return ''
-
-    def severity(candidate: str) -> int:
-        match = _SEVERITY_RE.match(candidate)
-        return _SEVERITY_RANK.get(match.group(1).upper(), 0) if match else 0
-
-    return max(candidates, key=severity)
+    kept_reversed.reverse()
+    return kept_reversed, omitted, content_shortened
 
 
 class AnomalyService:
@@ -132,6 +105,9 @@ class AnomalyService:
                 f"Too many messages in conversation history ({len(history)}); "
                 f"max is {self.settings.max_chat_history_messages}."
             )
+        history, history_messages_omitted, history_content_shortened = _trim_history(
+            history, self.settings.max_chat_history_tokens
+        )
 
         # Defense in depth: masking.py is applied when events are first fetched
         # from CloudWatch/CloudTrail, but this endpoint accepts a raw events
@@ -139,6 +115,8 @@ class AnomalyService:
         # normal fetch path can't leak unmasked secrets/PII to an LLM provider.
         # mask_message is idempotent, so this is a no-op for already-masked text.
         events = [e.model_copy(update={"message": mask_message(e.message)}) for e in events]
+        events = log_filter.compact_json(events)
+        derived_counts = log_filter.derived_counts(events)
 
         provider_cls = get_provider_class(provider)
         defaults = self._defaults[provider]
@@ -153,38 +131,79 @@ class AnomalyService:
         limiter = self._limiters[provider]
 
         if user_prompt:
-            # the regex prefilter is tuned to the default anomaly scan and
-            # could drop the very lines a custom request asks about
-            relevant, skipped = events, 0
+            relevant, skipped = log_filter.select_for_question(
+                events, user_prompt, self.settings
+            )
         else:
             relevant, skipped = log_filter.select_relevant(events, self.settings)
         selected_count = len(relevant)
-        relevant = log_filter.truncate_and_cap(relevant, self.settings)
+        compression = log_filter.compress_duplicates(relevant)
+        original_lengths = {
+            event.line_index: len(event.message) for event in compression.events
+        }
+        relevant = log_filter.truncate_and_cap(compression.events, self.settings)
         chunks = log_filter.chunk(relevant, self.settings)
 
         analyses: list[str] = []
         scheduled = [event for chunk_events in chunks for event in chunk_events]
-        omitted = selected_count - len(scheduled)
-        original_lengths = {event.line_index: len(event.message) for event in events}
+        lines_considered = sum(
+            compression.source_counts.get(event.line_index, 1) for event in scheduled
+        )
+        omitted = selected_count - lines_considered
         shortened = sum(
             len(event.message) < original_lengths[event.line_index] for event in scheduled
         )
         warnings: list[str] = []
+        if history_messages_omitted or history_content_shortened:
+            detail = f"{history_messages_omitted} older message(s) omitted"
+            if history_content_shortened:
+                detail += " and the newest oversized message was shortened"
+            warnings.append(f"Conversation history was compacted: {detail}.")
+        if compression.collapsed:
+            warnings.append(
+                f"Collapsed {compression.collapsed} repetitive log lines into counted "
+                "representatives before analysis."
+            )
         if omitted:
             warnings.append(f"Processing limits excluded {omitted} selected log lines.")
         if shortened:
             warnings.append(f"{shortened} scheduled log lines were shortened before analysis.")
+        prompt_context = context.model_copy(
+            update={
+                "source_description": (
+                    f"{context.source_description}; app_visible_logs={len(events)}; "
+                    f"app_retrieval_excluded={skipped}; "
+                    f"app_processing_omitted={omitted}; "
+                    f"app_derived_counts={json.dumps(derived_counts, separators=(',', ':'))}"
+                )
+            }
+        )
         analyzed = 0
         lines_analyzed = 0
+        estimated_input_tokens = sum(
+            log_filter.estimate_tokens(SYSTEM_PROMPT)
+            + log_filter.estimate_tokens(
+                build_prompt(chunk_events, prompt_context, user_prompt, history)
+            )
+            for chunk_events in chunks
+        )
         for i, chunk_events in enumerate(chunks):
             await limiter.wait()
             try:
                 result = await self._call_chunk(
-                    chunk_events, context, instance, defaults.max_retries, user_prompt, history
+                    chunk_events,
+                    prompt_context,
+                    instance,
+                    defaults.max_retries,
+                    user_prompt,
+                    history,
                 )
                 analyses.append(result.analysis)
                 analyzed += 1
-                lines_analyzed += len(chunk_events)
+                lines_analyzed += sum(
+                    compression.source_counts.get(event.line_index, 1)
+                    for event in chunk_events
+                )
             except LLMQuotaExceededError as e:
                 if analyzed == 0:
                     raise LLMQuotaExceededError(
@@ -200,26 +219,36 @@ class AnomalyService:
                 continue
 
         if analyses:
-            overview = _select_best_analysis(analyses)
+            consolidated = analyses[0].strip()
             if len(analyses) > 1:
                 await limiter.wait()
+                reduction_prompt = build_reduction_prompt(analyses, user_prompt)
+                estimated_input_tokens += log_filter.estimate_tokens(
+                    REDUCTION_SYSTEM_PROMPT
+                ) + log_filter.estimate_tokens(reduction_prompt)
                 try:
                     result = await self._reduce_analyses(
-                        analyses, instance, defaults.max_retries
+                        analyses, instance, defaults.max_retries, user_prompt
                     )
-                    reduced = _normalize_one_sentence(result.analysis)
+                    reduced = result.analysis.strip()
                     if reduced:
-                        overview = reduced
+                        consolidated = reduced
                     else:
                         warnings.append(
-                            'The final summary was empty; showing the strongest chunk result.'
+                            "The consolidated answer was empty; showing the batch answers."
+                        )
+                        consolidated = "\n\n".join(
+                            answer.strip() for answer in analyses if answer.strip()
                         )
                 except (LLMQuotaExceededError, LLMRequestError) as e:
                     warnings.append(
-                        'Could not consolidate all analyzed chunks; showing the '
-                        f'strongest chunk result instead: {e.message}'
+                        "Could not consolidate all analyzed batches; showing the "
+                        f"batch answers instead: {e.message}"
                     )
-            analyses = [overview] if overview else []
+                    consolidated = "\n\n".join(
+                        answer.strip() for answer in analyses if answer.strip()
+                    )
+            analyses = [consolidated] if consolidated else []
 
         return AnalysisResponse(
             analysis="\n\n".join(analyses),
@@ -227,11 +256,15 @@ class AnomalyService:
             chunks_total=len(chunks),
             lines_submitted=len(events),
             lines_analyzed=lines_analyzed,
+            lines_sent_to_model=len(scheduled),
+            lines_collapsed_as_duplicates=compression.collapsed,
             lines_omitted_by_limits=omitted,
-            lines_not_analyzed=len(scheduled) - lines_analyzed,
+            lines_not_analyzed=lines_considered - lines_analyzed,
             lines_shortened=shortened,
-            lines_considered=len(scheduled),
+            lines_considered=lines_considered,
             lines_skipped_by_prefilter=skipped,
+            history_messages_omitted=history_messages_omitted,
+            estimated_input_tokens=estimated_input_tokens,
             model=effective_model,
             warnings=warnings,
         )
@@ -295,8 +328,9 @@ class AnomalyService:
         analyses: list[str],
         provider: LLMProvider,
         max_retries: int,
+        user_prompt: str | None = None,
     ) -> ChunkResult:
-        prompt = build_reduction_prompt(analyses)
+        prompt = build_reduction_prompt(analyses, user_prompt)
         for attempt in range(max_retries + 1):
             try:
                 return await provider.call_chunk(REDUCTION_SYSTEM_PROMPT, prompt)

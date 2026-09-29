@@ -14,12 +14,8 @@ export function FilterBar() {
   const logGroupNames = useSelectionStore((s) => s.logGroupNames);
   const startTime = useSelectionStore((s) => s.startTime);
   const endTime = useSelectionStore((s) => s.endTime);
-  const loadedCount = useSelectionStore((s) => s.events.length);
 
   const search = useCloudWatchSearch();
-  // Snapshot of the request that produced the current cursor, so "Load more"
-  // keeps paging the same query even if the sidebar inputs change afterward.
-  const [lastRequest, setLastRequest] = useState<CloudWatchSearchRequest | null>(null);
   const [liveTailRunning, setLiveTailRunning] = useState(false);
 
   if (sourceMode !== "cloudwatch") {
@@ -36,14 +32,8 @@ export function FilterBar() {
       end_time: endTime,
       filter_pattern: filterPattern || null,
     };
-    setLastRequest(request);
     search.reset(); // drop any stale truncated/cursor state from a previous query
     search.mutate(request);
-  };
-
-  const loadMore = () => {
-    if (!lastRequest || !search.data?.cursor) return;
-    search.mutate({ ...lastRequest, cursor: search.data.cursor });
   };
 
   return (
@@ -71,22 +61,6 @@ export function FilterBar() {
             ? search.error.response?.data?.detail
             : "Search failed. Check the backend logs."}
         </p>
-      )}
-      {search.data?.cursor && (
-        <div className="load-more-row">
-          <p className="hint">
-            Showing {loadedCount.toLocaleString()} lines · Continue loading to check for more results.
-          </p>
-          <button
-            type="button"
-            className="btn-block"
-            disabled={search.isPending || liveTailRunning}
-            onClick={loadMore}
-          >
-            {search.isPending && <span className="spinner dark" />}
-            {search.isPending ? "Loading..." : "Load more"}
-          </button>
-        </div>
       )}
       <LiveTailControls onRunningChange={setLiveTailRunning} />
     </div>

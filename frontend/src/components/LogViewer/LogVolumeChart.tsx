@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
+import { type PointerEvent, useMemo, useRef, useState } from 'react'
 
 import type { LogEvent } from '../../api/types'
+import type { HighlightedRange } from '../../state/selectionStore'
 import { facetColor } from '../../utils/facetColors'
 import { extractLogFacets, type LogFacetKey, type LogFacetSelection } from '../../utils/logFacets'
 import { DISPLAY_TIME_ZONE_LABEL, formatSingaporeDateTime, formatSingaporeTime } from '../../utils/time'
@@ -57,11 +58,17 @@ interface LogVolumeChartProps {
   rangeEnd: string
   facetSelection: LogFacetSelection
   onFacetChange: (selection: LogFacetSelection) => void
-  onBucketClick?: (range: { start: number; end: number }) => void
+  onBucketClick?: (range: HighlightedRange) => void
 }
 
 export function LogVolumeChart({ events, rangeStart, rangeEnd, facetSelection, onFacetChange, onBucketClick }: LogVolumeChartProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
+  const [dragSelection, setDragSelection] = useState<{ start: number; end: number } | null>(null)
+  const [selectedBars, setSelectedBars] = useState<{ start: number; end: number } | null>(null)
+  const dragAnchorRef = useRef<number | null>(null)
+  const dragCurrentRef = useRef<number | null>(null)
+  const didDragRef = useRef(false)
+  const suppressClickRef = useRef(false)
   const range = useMemo(() => {
     const start = new Date(rangeStart)
     const end = new Date(rangeEnd)
@@ -85,6 +92,65 @@ export function LogVolumeChart({ events, rangeStart, rangeEnd, facetSelection, o
     })
   }
 
+  const bucketIndexAtPointer = (event: PointerEvent<HTMLDivElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect()
+    const position = Math.min(bounds.width, Math.max(0, event.clientX - bounds.left))
+    return Math.min(buckets.length - 1, Math.floor((position / bounds.width) * buckets.length))
+  }
+
+  const beginBarSelection = (event: PointerEvent<HTMLDivElement>) => {
+    if (!onBucketClick || event.button !== 0) return
+    const index = bucketIndexAtPointer(event)
+    dragAnchorRef.current = index
+    dragCurrentRef.current = index
+    didDragRef.current = false
+  }
+
+  const updateBarSelection = (event: PointerEvent<HTMLDivElement>) => {
+    const anchor = dragAnchorRef.current
+    if (anchor === null) return
+    const index = bucketIndexAtPointer(event)
+    setHoveredIndex(index)
+    if (index === dragCurrentRef.current) return
+    dragCurrentRef.current = index
+    didDragRef.current = true
+    setDragSelection({ start: Math.min(anchor, index), end: Math.max(anchor, index) })
+    event.preventDefault()
+  }
+
+  const finishBarSelection = () => {
+    const anchor = dragAnchorRef.current
+    const current = dragCurrentRef.current
+    const didDrag = didDragRef.current
+    dragAnchorRef.current = null
+    dragCurrentRef.current = null
+    didDragRef.current = false
+    setDragSelection(null)
+    if (anchor === null || current === null || !didDrag || !onBucketClick) return
+
+    const selectedRanges = buckets
+      .slice(Math.min(anchor, current), Math.max(anchor, current) + 1)
+      .filter((bucket) => bucket.minLineIndex !== null && bucket.maxLineIndex !== null)
+      .map((bucket) => ({ start: bucket.minLineIndex!, end: bucket.maxLineIndex! }))
+    if (selectedRanges.length === 0) return
+
+    suppressClickRef.current = true
+    setSelectedBars({ start: Math.min(anchor, current), end: Math.max(anchor, current) })
+    onBucketClick({
+      start: Math.min(...selectedRanges.map((selected) => selected.start)),
+      end: Math.max(...selectedRanges.map((selected) => selected.end)),
+      ranges: selectedRanges,
+    })
+    window.setTimeout(() => { suppressClickRef.current = false }, 0)
+  }
+
+  const cancelBarSelection = () => {
+    dragAnchorRef.current = null
+    dragCurrentRef.current = null
+    didDragRef.current = false
+    setDragSelection(null)
+  }
+
   return (
     <div className="log-volume-chart">
       <div className="log-volume-color-label">
@@ -97,24 +163,46 @@ export function LogVolumeChart({ events, rangeStart, rangeEnd, facetSelection, o
           <span className="log-volume-tooltip-range">{bucketLabel(hovered.start, hovered.end)}</span>
         </div>
       )}
-      <div className="log-volume-bars" style={{ height: CHART_HEIGHT }}>
+      <div
+        className={`log-volume-bars${dragSelection ? ' dragging' : ''}`}
+        style={{ height: CHART_HEIGHT }}
+        onPointerDown={beginBarSelection}
+        onPointerMove={updateBarSelection}
+        onPointerUp={finishBarSelection}
+        onPointerCancel={cancelBarSelection}
+        onPointerLeave={finishBarSelection}
+      >
         {buckets.map((bucket, index) => {
           const height = bucket.count === 0 ? 0 : Math.max(2, Math.round((bucket.count / maxCount) * CHART_HEIGHT))
           const hasData = bucket.count > 0 && bucket.minLineIndex !== null && bucket.maxLineIndex !== null
-          const activateBucket = () => hasData && onBucketClick?.({ start: bucket.minLineIndex!, end: bucket.maxLineIndex! })
+          const activateBucket = () => {
+            if (!hasData) return
+            setSelectedBars({ start: index, end: index })
+            onBucketClick?.({ start: bucket.minLineIndex!, end: bucket.maxLineIndex! })
+          }
+          const isDragSelected = dragSelection !== null && index >= dragSelection.start && index <= dragSelection.end
+          const isSelected = selectedBars !== null && index >= selectedBars.start && index <= selectedBars.end
           return (
             <div
               key={index}
-              className={`log-volume-bar${hoveredIndex === index ? ' hovered' : ''}${hasData ? ' clickable' : ''}`}
+              className={`log-volume-bar${hoveredIndex === index ? ' hovered' : ''}${hasData ? ' clickable' : ''}${isSelected ? ' selected' : ''}${isDragSelected ? ' drag-selected' : ''}`}
               style={{ height }}
               tabIndex={hasData ? 0 : -1}
               role={hasData ? 'button' : 'graphics-symbol'}
+              aria-pressed={hasData ? isSelected : undefined}
               aria-label={`${bucket.count} lines, ${bucketLabel(bucket.start, bucket.end)}`}
               onMouseEnter={() => setHoveredIndex(index)}
               onMouseLeave={() => setHoveredIndex((value) => value === index ? null : value)}
               onFocus={() => setHoveredIndex(index)}
               onBlur={() => setHoveredIndex((value) => value === index ? null : value)}
-              onClick={activateBucket}
+              onClick={(event) => {
+                if (suppressClickRef.current) {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  return
+                }
+                activateBucket()
+              }}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault()
@@ -127,7 +215,7 @@ export function LogVolumeChart({ events, rangeStart, rangeEnd, facetSelection, o
                 const inactive = selected.length > 0 && !selected.includes(value)
                 const canFilter = colorFacet !== null && value !== 'Other'
                 const color = colorFacet ? facetColor(colorFacet, value) : 'var(--severity-success)'
-                return <span key={value} className={`log-volume-segment${inactive ? ' inactive' : ''}`} style={{ height: `${(count / bucket.count) * 100}%`, background: color }} role={canFilter ? 'button' : undefined} tabIndex={canFilter ? 0 : undefined} title={canFilter ? `Filter ${colorFacet} by ${value}` : undefined} onClick={canFilter ? (event) => { event.stopPropagation(); toggleFacet(value) } : undefined} onKeyDown={canFilter ? (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); toggleFacet(value) } } : undefined} />
+                return <span key={value} className={`log-volume-segment${inactive ? ' inactive' : ''}`} style={{ height: `${(count / bucket.count) * 100}%`, background: color }} role={canFilter ? 'button' : undefined} tabIndex={canFilter ? 0 : undefined} title={canFilter ? `Filter ${colorFacet} by ${value}` : undefined} onClick={canFilter ? (event) => { event.stopPropagation(); if (!suppressClickRef.current) toggleFacet(value) } : undefined} onKeyDown={canFilter ? (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); toggleFacet(value) } } : undefined} />
               })}
             </div>
           )

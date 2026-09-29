@@ -117,11 +117,15 @@ export interface AnalysisResponse {
   chunks_total: number;
   lines_submitted: number;
   lines_analyzed: number;
+  lines_sent_to_model?: number;
+  lines_collapsed_as_duplicates?: number;
   lines_omitted_by_limits: number;
   lines_not_analyzed: number;
   lines_shortened: number;
   lines_considered: number;
   lines_skipped_by_prefilter: number;
+  history_messages_omitted?: number;
+  estimated_input_tokens?: number;
   model: string;
   warnings: string[];
 }

@@ -4,7 +4,7 @@ from app.config import Settings
 from app.services.llm.base import DEFAULT_LLM_TIMEOUT_S, ProviderDefaults
 from app.services.llm.openai_provider import OpenAIProvider
 
-DEFAULT_MODEL = "llama3.1"
+DEFAULT_MODEL = "qwen3.5:9b"
 DEFAULT_BASE_URL = "http://localhost:11434/v1"
 DEFAULT_RPM = 6000  # local inference, effectively unpaced
 DEFAULT_MAX_RETRIES = 0  # no cloud quota to back off against
@@ -44,3 +44,9 @@ class OllamaProvider(OpenAIProvider):
             max_retries=0,
         )
         self.model = model
+        self.max_output_tokens = settings.max_llm_output_tokens
+        self.extra_body = (
+            {"reasoning_effort": "none"}
+            if model.lower().split(":")[0] == "qwen3.5"
+            else None
+        )
