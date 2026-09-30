@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     # AWS
     aws_profile: str | None = None
     aws_region: str = "ap-southeast-1"
+    aws_role_arn: str | None = None
+    aws_role_external_id: str | None = None
+    aws_role_session_name: str = "anomalog"
     aws_include_linked_accounts: bool = False
 
     # LiteLLM (default provider — team's internal proxy)

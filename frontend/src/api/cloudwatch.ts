@@ -6,9 +6,12 @@ import type {
   LogGroupsResponse,
 } from "./types";
 
-export async function fetchLogGroups(prefix?: string): Promise<LogGroupsResponse> {
+export async function fetchLogGroups(
+  prefix?: string,
+  nextToken?: string
+): Promise<LogGroupsResponse> {
   const { data } = await apiClient.get<LogGroupsResponse>("/api/cloudwatch/log-groups", {
-    params: { prefix: prefix || undefined },
+    params: { prefix: prefix || undefined, next_token: nextToken },
   });
   return data;
 }

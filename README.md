@@ -300,11 +300,66 @@ The HTTPS reverse proxy and certificate are managed outside this Compose file;
 they must route `/api/*` (including WebSockets) to port 8000 and all other
 requests to port 5173.
 
-When `AWS_INCLUDE_LINKED_ACCOUNTS=true`, CloudWatch log-group discovery includes
-groups shared with the monitoring account through CloudWatch cross-account
-observability. The UI uses each group's ARN for searches and Live Tail, while
-showing the owning account ID beside the group name. The assumed monitoring
-role must be permitted to read the shared log groups.
+When the EC2 instance is in account A and the monitoring account is account B,
+configure the app to assume a read role in B and enable linked-account discovery:
+
+```bash
+AWS_ROLE_ARN=arn:aws:iam::MONITORING_ACCOUNT_ID:role/AnomalogMonitoringReadRole \
+AWS_INCLUDE_LINKED_ACCOUNTS=true \
+./update-ec2.sh
+```
+
+`deploy.sh` stores these values in `backend/.env`; later deployments preserve
+them. `AWS_ROLE_EXTERNAL_ID` is also supported when the role trust policy
+requires one. The deployment check prints the effective assumed-role ARN so a
+misconfigured identity is visible immediately.
+
+The account A EC2 instance role needs permission to assume only the monitoring
+role:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": "sts:AssumeRole",
+    "Resource": "arn:aws:iam::MONITORING_ACCOUNT_ID:role/AnomalogMonitoringReadRole"
+  }]
+}
+```
+
+The account B role's trust policy must name the exact account A instance role:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {
+      "AWS": "arn:aws:iam::APPLICATION_ACCOUNT_ID:role/AnomalogEc2Role"
+    },
+    "Action": "sts:AssumeRole"
+  }]
+}
+```
+
+The role in account B also needs the CloudWatch permissions shown below. When
+`AWS_INCLUDE_LINKED_ACCOUNTS=true`, log-group discovery includes groups shared
+with B through CloudWatch cross-account observability. The UI uses each group's
+ARN for searches and Live Tail, labels the owning account ID, and can load
+every page rather than stopping at the first 50 groups.
+
+CloudWatch Logs *centralization* is different: it copies new events into log
+groups owned by B. Those copied groups therefore display B's account ID. Use a
+destination naming pattern containing `${source.accountId}`, such as
+`/centralized/${source.accountId}${source.logGroup}`, when the source account
+must remain identifiable in the app.
+
+The CloudTrail tab uses `LookupEvents`, which AWS limits to one account and one
+Region; an organization trail does not merge member events into B's event
+history. To inspect centralized organization CloudTrail events in Anomalog,
+deliver the trail to a CloudWatch Logs group and select that group in the
+CloudWatch tab. CloudTrail Lake support would require a separate query path.
 
 The app has **no authentication** — restrict access at the network layer
 (security group scoped to your IP, VPN, or an authenticated reverse proxy).
@@ -316,10 +371,12 @@ that:
 - `VITE_API_BASE_URL` (`frontend/.env`) and `CORS_ORIGINS` (`backend/.env`)
   are **browser-facing** values: set them to the host's public address, not
   `localhost`, and keep them consistent with the exact origin you browse from.
-- On EC2, prefer an instance IAM role over exported keys: leave `AWS_PROFILE`
-  unset and attach CloudWatch Logs/CloudTrail read policies to the role. If the
-  backend runs in Docker, raise the IMDS hop limit so the container can reach
-  role credentials:
+- On EC2, prefer an instance IAM role over exported keys and leave
+  `AWS_PROFILE` unset. For a same-account deployment, attach the read policy
+  directly. For the account A/account B deployment, use the restricted
+  `sts:AssumeRole` permission described above and attach the read policy to the
+  account B role. If the backend runs in Docker, raise the IMDS hop limit so
+  the container can reach role credentials:
   `aws ec2 modify-instance-metadata-options --http-put-response-hop-limit 2`.
 - Live Tail is denied unless the backend role is explicitly allowed to start
   and stop it. Scope the log-group resources to the groups Anomalog may access:

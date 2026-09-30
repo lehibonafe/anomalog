@@ -124,7 +124,18 @@ if [ -n "${AWS_REGION:-}" ]; then
   set_kv backend/.env AWS_REGION "$AWS_REGION"
 fi
 
-# Optional CloudWatch cross-account observability override.
+# Optional monitoring-account role and CloudWatch cross-account observability
+# overrides. Values already stored in backend/.env remain unchanged when the
+# corresponding environment variable is absent.
+if [ -n "${AWS_ROLE_ARN:-}" ]; then
+  set_kv backend/.env AWS_ROLE_ARN "$AWS_ROLE_ARN"
+fi
+if [ -n "${AWS_ROLE_EXTERNAL_ID:-}" ]; then
+  set_kv backend/.env AWS_ROLE_EXTERNAL_ID "$AWS_ROLE_EXTERNAL_ID"
+fi
+if [ -n "${AWS_ROLE_SESSION_NAME:-}" ]; then
+  set_kv backend/.env AWS_ROLE_SESSION_NAME "$AWS_ROLE_SESSION_NAME"
+fi
 if [ -n "${AWS_INCLUDE_LINKED_ACCOUNTS:-}" ]; then
   set_kv backend/.env AWS_INCLUDE_LINKED_ACCOUNTS "$AWS_INCLUDE_LINKED_ACCOUNTS"
 fi
@@ -173,7 +184,7 @@ fi
 
 echo "==> Checking AWS credentials inside the backend container..."
 if arn=$(docker compose exec -T backend python -c \
-  "import boto3; print(boto3.Session().client('sts').get_caller_identity()['Arn'])" 2>&1); then
+  "from app.core.aws_session import get_boto3_session; print(get_boto3_session().client('sts').get_caller_identity()['Arn'])" 2>&1); then
   echo "==> AWS identity: $arn"
 else
   echo "warning: the backend container could not obtain AWS credentials." >&2
