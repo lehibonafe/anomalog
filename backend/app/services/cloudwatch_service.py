@@ -20,6 +20,30 @@ def _ms_to_dt(ms: int | None) -> datetime | None:
     return datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
 
 
+def _normalize_log_group_arn(arn: str) -> str:
+    """Return the log-group ARN form accepted by cross-account read APIs."""
+    return arn.removesuffix(":*")
+
+
+def _account_id_from_identifier(identifier: str) -> str | None:
+    if not identifier.startswith("arn:"):
+        return None
+    parts = identifier.split(":", 5)
+    return parts[4] if len(parts) == 6 else None
+
+
+def _display_log_group(identifier: str) -> str:
+    if ":log-group:" in identifier:
+        return identifier.split(":log-group:", 1)[1].removesuffix(":*")
+    return identifier
+
+
+def _log_group_parameter(identifier: str) -> dict[str, str]:
+    if identifier.startswith("arn:"):
+        return {"logGroupIdentifier": _normalize_log_group_arn(identifier)}
+    return {"logGroupName": identifier}
+
+
 def _encode_cursor(tokens: dict[str, str]) -> str | None:
     if not tokens:
         return None
@@ -35,10 +59,15 @@ def _decode_cursor(cursor: str | None) -> dict[str, str]:
 
 
 def list_log_groups(
-    prefix: str | None, next_token: str | None, limit: int
+    prefix: str | None,
+    next_token: str | None,
+    limit: int,
+    settings: Settings,
 ) -> LogGroupsResponse:
     client = get_logs_client()
     kwargs: dict = {"limit": limit}
+    if settings.aws_include_linked_accounts:
+        kwargs["includeLinkedAccounts"] = True
     if prefix:
         kwargs["logGroupNamePrefix"] = prefix
     if next_token:
@@ -47,6 +76,10 @@ def list_log_groups(
     groups = [
         LogGroup(
             name=g["logGroupName"],
+            identifier=_normalize_log_group_arn(
+                g.get("logGroupArn") or g.get("arn") or g["logGroupName"]
+            ),
+            account_id=_account_id_from_identifier(g.get("logGroupArn") or g.get("arn", "")),
             stored_bytes=g.get("storedBytes"),
             creation_time=_ms_to_dt(g.get("creationTime")),
         )
@@ -96,11 +129,11 @@ def search_log_events(
             next_tokens[name] = tokens.get(name, "")
             continue
         kwargs: dict = {
-            "logGroupName": name,
             "startTime": start_ms,
             "endTime": end_ms,
             "limit": min(remaining, 1000),
         }
+        kwargs.update(_log_group_parameter(name))
         if filter_pattern:
             kwargs["filterPattern"] = filter_pattern
         token = tokens.get(name)
@@ -124,7 +157,7 @@ def search_log_events(
     all_events: list[LogEvent] = [
         LogEvent(
             source="cloudwatch",
-            origin=origin,
+            origin=_display_log_group(origin),
             stream_or_key=stream,
             timestamp=timestamp,
             message=masked,

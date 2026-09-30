@@ -7,6 +7,8 @@ from app.schemas.common import LogEvent
 
 class LogGroup(BaseModel):
     name: str
+    identifier: str
+    account_id: str | None = None
     stored_bytes: int | None = None
     creation_time: datetime | None = None
 

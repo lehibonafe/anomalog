@@ -2,18 +2,25 @@
 # Deploy Anomalog on a remote host (e.g. EC2) with docker compose.
 #
 # What it does, in order:
-#   1. Detects the host's public address (EC2 IMDSv2 first, then checkip),
-#      or takes it as an argument: ./deploy.sh <ip-or-dns>
+#   1. Uses PUBLIC_URL (or its first argument) as the browser-facing origin.
+#      If neither is set, it reuses the current configuration or detects the
+#      host's public address for a legacy direct-port HTTP deployment.
 #   2. Creates backend/.env and frontend/.env from their .env.example files
 #      if missing, and fills in the browser-facing values that depend on the
-#      public address (VITE_API_BASE_URL, CORS_ORIGINS).
-#   3. Ensures GEMINI_API_KEY is set (kept from an existing .env, taken from
-#      the GEMINI_API_KEY env var, or prompted for).
+#      public origin (VITE_API_BASE_URL, CORS_ORIGINS).
+#   3. Preserves all existing secrets and optionally applies AWS_REGION.
 #   4. Builds and (re)creates both containers with docker compose.
 #   5. Verifies the backend is up and can reach AWS credentials.
 #
-# Idempotent: safe to re-run for updates; it rewrites only the address-derived
-# values and never overwrites an existing GEMINI_API_KEY.
+# Recommended production usage behind an HTTPS reverse proxy:
+#   PUBLIC_URL=https://anomalog.example.com ./deploy.sh
+#
+# For a split frontend/API deployment, set API_BASE_URL separately:
+#   PUBLIC_URL=https://app.example.com \
+#     API_BASE_URL=https://api.example.com ./deploy.sh
+#
+# Idempotent: safe to re-run after updates. It rewrites only address-derived
+# values and never overwrites secrets in the existing .env files.
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -33,18 +40,34 @@ set_kv() {
   fi
 }
 
-# --- 1. resolve the public address ------------------------------------------
+# --- 1. resolve browser-facing URLs -----------------------------------------
 
-PUBLIC_HOST="${1:-${PUBLIC_HOST:-}}"
+PUBLIC_URL="${1:-${PUBLIC_URL:-}}"
+API_BASE_URL="${API_BASE_URL:-}"
 
-# On re-runs, keep the host already configured in frontend/.env (it may be a
-# private/VPN address that detection below would wrongly replace)
-if [ -z "$PUBLIC_HOST" ] && [ -f frontend/.env ]; then
-  PUBLIC_HOST=$(grep -oP '^VITE_API_BASE_URL=https?://\K[^:/]+' frontend/.env || true)
-  [ -n "$PUBLIC_HOST" ] && echo "==> Reusing configured address from frontend/.env"
+if [ -n "$PUBLIC_URL" ]; then
+  case "$PUBLIC_URL" in
+    http://*|https://*)
+      PUBLIC_ORIGIN="${PUBLIC_URL%/}"
+      ;;
+    *)
+      # Backward compatibility with the previous `./deploy.sh <ip-or-dns>`
+      # interface, which exposed Vite and FastAPI directly over HTTP.
+      PUBLIC_HOST="$PUBLIC_URL"
+      PUBLIC_ORIGIN="http://${PUBLIC_HOST}:${FRONTEND_PORT}"
+      [ -n "$API_BASE_URL" ] || API_BASE_URL="http://${PUBLIC_HOST}:${BACKEND_PORT}"
+      ;;
+  esac
 fi
 
-if [ -z "$PUBLIC_HOST" ]; then
+# On re-runs, keep the exact CORS origin already configured. This preserves
+# HTTPS and avoids silently changing a DNS deployment back to a detected IP.
+if [ -z "${PUBLIC_ORIGIN:-}" ] && [ -f backend/.env ]; then
+  PUBLIC_ORIGIN=$(sed -n 's/^CORS_ORIGINS=\["\([^"]*\)"\]$/\1/p' backend/.env | head -n 1)
+  [ -n "$PUBLIC_ORIGIN" ] && echo "==> Reusing configured public origin: $PUBLIC_ORIGIN"
+fi
+
+if [ -z "${PUBLIC_ORIGIN:-}" ]; then
   # EC2 instance metadata (IMDSv2); -m keeps this fast off-EC2
   token=$(curl -sf -m 2 -X PUT http://169.254.169.254/latest/api/token \
     -H "X-aws-ec2-metadata-token-ttl-seconds: 60" 2>/dev/null || true)
@@ -54,42 +77,56 @@ if [ -z "$PUBLIC_HOST" ]; then
   fi
 fi
 
-if [ -z "$PUBLIC_HOST" ]; then
+if [ -z "${PUBLIC_HOST:-}" ] && [ -z "${PUBLIC_ORIGIN:-}" ]; then
   PUBLIC_HOST=$(curl -sf -m 5 https://checkip.amazonaws.com 2>/dev/null | tr -d '[:space:]' || true)
 fi
 
-if [ -z "$PUBLIC_HOST" ]; then
-  echo "error: could not detect the public address automatically." >&2
-  echo "Pass it explicitly:  ./deploy.sh <public-ip-or-dns>" >&2
+if [ -z "${PUBLIC_ORIGIN:-}" ] && [ -n "${PUBLIC_HOST:-}" ]; then
+  PUBLIC_ORIGIN="http://${PUBLIC_HOST}:${FRONTEND_PORT}"
+  [ -n "$API_BASE_URL" ] || API_BASE_URL="http://${PUBLIC_HOST}:${BACKEND_PORT}"
+fi
+
+if [ -z "${PUBLIC_ORIGIN:-}" ]; then
+  echo "error: could not determine the browser-facing URL." >&2
+  echo "Pass it explicitly: PUBLIC_URL=https://anomalog.example.com ./deploy.sh" >&2
   exit 1
 fi
 
-echo "==> Deploying with public address: $PUBLIC_HOST"
+case "$PUBLIC_ORIGIN" in
+  http://*|https://*) ;;
+  *)
+    echo "error: PUBLIC_URL must start with http:// or https://" >&2
+    exit 1
+    ;;
+esac
 
-# --- 2 & 3. env files --------------------------------------------------------
+# With an HTTPS reverse proxy, the API is normally served from the same origin
+# under /api. Preserve an existing API URL only when no explicit public URL was
+# supplied; otherwise default to the new public origin.
+if [ -z "$API_BASE_URL" ]; then
+  if [ -z "$PUBLIC_URL" ] && [ -f frontend/.env ]; then
+    API_BASE_URL=$(sed -n 's/^VITE_API_BASE_URL=//p' frontend/.env | head -n 1)
+  fi
+  [ -n "$API_BASE_URL" ] || API_BASE_URL="$PUBLIC_ORIGIN"
+fi
+API_BASE_URL="${API_BASE_URL%/}"
+
+echo "==> Browser origin: $PUBLIC_ORIGIN"
+echo "==> Browser API URL: $API_BASE_URL"
+
+# --- 2. env files ------------------------------------------------------------
 
 [ -f backend/.env ]  || cp backend/.env.example backend/.env
 [ -f frontend/.env ] || cp frontend/.env.example frontend/.env
 
-# GEMINI_API_KEY: keep existing value; else env var; else prompt
-existing_key=$(grep -oP '^GEMINI_API_KEY=\K.+' backend/.env || true)
-if [ -z "$existing_key" ]; then
-  if [ -z "${GEMINI_API_KEY:-}" ]; then
-    if [ -t 0 ]; then
-      read -rsp "GEMINI_API_KEY (input hidden): " GEMINI_API_KEY
-      echo
-    else
-      echo "error: GEMINI_API_KEY is empty in backend/.env and not provided." >&2
-      echo "Re-run with:  GEMINI_API_KEY=... ./deploy.sh" >&2
-      exit 1
-    fi
-  fi
-  set_kv backend/.env GEMINI_API_KEY "$GEMINI_API_KEY"
-fi
-
 # Optional region override: AWS_REGION=... ./deploy.sh
 if [ -n "${AWS_REGION:-}" ]; then
   set_kv backend/.env AWS_REGION "$AWS_REGION"
+fi
+
+# Optional CloudWatch cross-account observability override.
+if [ -n "${AWS_INCLUDE_LINKED_ACCOUNTS:-}" ]; then
+  set_kv backend/.env AWS_INCLUDE_LINKED_ACCOUNTS "$AWS_INCLUDE_LINKED_ACCOUNTS"
 fi
 
 # A blank AWS_PROFILE= line breaks boto3 in Docker (env_file exports it as an
@@ -98,15 +135,15 @@ fi
 sed -i '/^AWS_PROFILE=$/d' backend/.env
 
 # Browser-facing values — must match the origin the browser actually uses
-set_kv backend/.env  CORS_ORIGINS      "[\"http://${PUBLIC_HOST}:${FRONTEND_PORT}\"]"
-set_kv frontend/.env VITE_API_BASE_URL "http://${PUBLIC_HOST}:${BACKEND_PORT}"
+set_kv backend/.env  CORS_ORIGINS      "[\"${PUBLIC_ORIGIN}\"]"
+set_kv frontend/.env VITE_API_BASE_URL "$API_BASE_URL"
 
 echo "==> backend/.env and frontend/.env configured"
 
 # --- 4. build and launch ------------------------------------------------------
 
-# up -d (not restart) so env_file changes are picked up by recreating containers
-docker compose up -d --build
+# Force recreation so env_file changes are always loaded after a git pull.
+docker compose up -d --build --force-recreate
 
 # --- 5. verify -----------------------------------------------------------------
 
@@ -126,6 +163,14 @@ if [ -z "${healthy:-}" ]; then
 fi
 echo "==> Backend is healthy"
 
+echo "==> Checking the public health endpoint..."
+if curl -fsS --max-time 15 -o /dev/null "${API_BASE_URL}/api/health"; then
+  echo "==> Public endpoint is healthy"
+else
+  echo "warning: ${API_BASE_URL}/api/health was not reachable from this host." >&2
+  echo "Check the reverse proxy, DNS, TLS certificate, and ports 80/443." >&2
+fi
+
 echo "==> Checking AWS credentials inside the backend container..."
 if arn=$(docker compose exec -T backend python -c \
   "import boto3; print(boto3.Session().client('sts').get_caller_identity()['Arn'])" 2>&1); then
@@ -138,5 +183,5 @@ else
 fi
 
 echo
-echo "Deployed. Open:  http://${PUBLIC_HOST}:${FRONTEND_PORT}"
-echo "Reminder: security group must allow TCP ${FRONTEND_PORT} and ${BACKEND_PORT} from your IP only — the app has no auth."
+echo "Deployed. Open: $PUBLIC_ORIGIN"
+echo "Reminder: the app has no authentication; restrict access at the network or proxy layer."

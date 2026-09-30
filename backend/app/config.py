@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     # AWS
     aws_profile: str | None = None
     aws_region: str = "ap-southeast-1"
+    aws_include_linked_accounts: bool = False
 
     # LiteLLM (default provider — team's internal proxy)
     litellm_api_key: str

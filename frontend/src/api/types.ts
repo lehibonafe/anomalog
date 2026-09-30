@@ -11,6 +11,8 @@ export interface LogEvent {
 
 export interface LogGroup {
   name: string;
+  identifier: string;
+  account_id: string | null;
   stored_bytes: number | null;
   creation_time: string | null;
 }

@@ -99,6 +99,28 @@ def test_stream_live_tail_reports_missing_log_group(mock_get_client):
     assert emitted == [{"type": "error", "message": "CloudWatch log group not found: missing"}]
 
 
+@patch("app.services.live_tail_service.get_logs_client")
+def test_stream_live_tail_accepts_cross_account_arn_without_resolving_name(mock_get_client):
+    client = MagicMock()
+    mock_get_client.return_value = client
+    arn = "arn:aws:logs:ap-southeast-1:222222222222:log-group:/aws/lambda/shared"
+    client.start_live_tail.return_value = {"responseStream": FakeEventStream([])}
+    emitted = []
+
+    stream_live_tail(
+        log_group_names=[arn],
+        filter_pattern=None,
+        settings=make_settings(),
+        emit=emitted.append,
+        stop_event=threading.Event(),
+        stream_holder={},
+    )
+
+    client.describe_log_groups.assert_not_called()
+    client.start_live_tail.assert_called_once_with(logGroupIdentifiers=[arn])
+    assert emitted == [{"type": "session_ended", "reason": "AWS ended the Live Tail session."}]
+
+
 async def test_live_tail_session_limiter_enforces_and_releases_limit():
     limiter = LiveTailSessionLimiter()
 

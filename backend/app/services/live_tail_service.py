@@ -49,6 +49,10 @@ def _resolve_log_group_identifiers(client, log_group_names: list[str]) -> dict[s
     """Return Live Tail ARN -> display-name mappings for exact log groups."""
     resolved: dict[str, str] = {}
     for name in dict.fromkeys(log_group_names):
+        if name.startswith("arn:"):
+            identifier = name.removesuffix(":*")
+            resolved[identifier] = _display_group(identifier, {})
+            continue
         response = client.describe_log_groups(logGroupNamePrefix=name, limit=50)
         group = next(
             (item for item in response.get("logGroups", []) if item.get("logGroupName") == name),

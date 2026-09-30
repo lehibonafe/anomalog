@@ -13,6 +13,62 @@ def make_settings(**overrides) -> Settings:
 
 
 @patch("app.services.cloudwatch_service.get_logs_client")
+def test_list_log_groups_includes_linked_accounts_and_returns_identifiers(mock_get_client):
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    source_arn = "arn:aws:logs:ap-southeast-1:222222222222:log-group:/aws/lambda/shared:*"
+    mock_client.describe_log_groups.return_value = {
+        "logGroups": [
+            {
+                "logGroupName": "/aws/lambda/shared",
+                "arn": source_arn,
+                "creationTime": 1000,
+            }
+        ]
+    }
+
+    result = cloudwatch_service.list_log_groups(
+        prefix="/aws/lambda",
+        next_token=None,
+        limit=50,
+        settings=make_settings(aws_include_linked_accounts=True),
+    )
+
+    mock_client.describe_log_groups.assert_called_once_with(
+        limit=50,
+        includeLinkedAccounts=True,
+        logGroupNamePrefix="/aws/lambda",
+    )
+    assert result.log_groups[0].identifier == source_arn.removesuffix(":*")
+    assert result.log_groups[0].account_id == "222222222222"
+
+
+@patch("app.services.cloudwatch_service.get_logs_client")
+def test_search_log_events_uses_identifier_for_cross_account_group(mock_get_client):
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.filter_log_events.return_value = {
+        "events": [{"logStreamName": "stream", "timestamp": 1000, "message": "event"}]
+    }
+    identifier = "arn:aws:logs:ap-southeast-1:222222222222:log-group:/aws/lambda/shared"
+
+    result = cloudwatch_service.search_log_events(
+        log_group_names=[identifier],
+        start_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        end_time=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        filter_pattern=None,
+        limit=100,
+        cursor=None,
+        settings=make_settings(),
+    )
+
+    kwargs = mock_client.filter_log_events.call_args.kwargs
+    assert kwargs["logGroupIdentifier"] == identifier
+    assert "logGroupName" not in kwargs
+    assert result.events[0].origin == "/aws/lambda/shared"
+
+
+@patch("app.services.cloudwatch_service.get_logs_client")
 def test_search_log_events_rejects_range_over_max_days(mock_get_client):
     settings = make_settings(max_time_range_days=7)
     start = datetime(2026, 1, 1, tzinfo=timezone.utc)

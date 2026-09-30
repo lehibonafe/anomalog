@@ -278,6 +278,34 @@ and all event messages pass through the configured PII masker before delivery.
 
 ## Deploying on a remote host (e.g. EC2)
 
+For the production EC2 host behind the HTTPS reverse proxy, update and deploy
+in one command:
+
+```bash
+./update-ec2.sh
+```
+
+The script runs `git pull --ff-only`, sets both the frontend API base and
+backend CORS origin to `https://anomalog.etapinc.com`, rebuilds and recreates
+the containers, and verifies the local and public health endpoints. Existing
+secrets in `backend/.env` are preserved. It also enables linked-account
+CloudWatch log discovery for the centralized monitoring account. Override the
+deployment URL when needed:
+
+```bash
+PUBLIC_URL=https://other.example.com ./update-ec2.sh
+```
+
+The HTTPS reverse proxy and certificate are managed outside this Compose file;
+they must route `/api/*` (including WebSockets) to port 8000 and all other
+requests to port 5173.
+
+When `AWS_INCLUDE_LINKED_ACCOUNTS=true`, CloudWatch log-group discovery includes
+groups shared with the monitoring account through CloudWatch cross-account
+observability. The UI uses each group's ARN for searches and Live Tail, while
+showing the owning account ID beside the group name. The assumed monitoring
+role must be permitted to read the shared log groups.
+
 The app has **no authentication** — restrict access at the network layer
 (security group scoped to your IP, VPN, or an authenticated reverse proxy).
 There is a lightweight per-IP inbound rate limit (`INBOUND_RATE_LIMIT_PER_MINUTE`,

@@ -31,8 +31,9 @@ def get_log_groups(
     prefix: str | None = Query(default=None),
     next_token: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=50),
+    settings: Settings = Depends(get_settings),
 ):
-    return cloudwatch_service.list_log_groups(prefix, next_token, limit)
+    return cloudwatch_service.list_log_groups(prefix, next_token, limit, settings)
 
 
 @router.post("/logs/search", response_model=CloudWatchSearchResponse)
