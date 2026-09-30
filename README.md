@@ -379,12 +379,22 @@ that:
   the container can reach role credentials:
   `aws ec2 modify-instance-metadata-options --http-put-response-hop-limit 2`.
 - Live Tail is denied unless the backend role is explicitly allowed to start
-  and stop it. Scope the log-group resources to the groups Anomalog may access:
+  and stop it. The monitoring role also needs OAM read permissions to discover
+  source-account links. Scope the log-group resources to the groups Anomalog
+  may access:
 
   ```json
   {
     "Version": "2012-10-17",
     "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": [
+          "oam:Get*",
+          "oam:List*"
+        ],
+        "Resource": "*"
+      },
       {
         "Effect": "Allow",
         "Action": "logs:DescribeLogGroups",

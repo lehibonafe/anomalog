@@ -28,7 +28,7 @@ def test_list_log_groups_includes_linked_accounts_and_returns_identifiers(mock_g
     }
 
     result = cloudwatch_service.list_log_groups(
-        prefix="/aws/lambda",
+        keyword="/aws/lambda",
         next_token=None,
         limit=50,
         settings=make_settings(aws_include_linked_accounts=True),
@@ -37,7 +37,7 @@ def test_list_log_groups_includes_linked_accounts_and_returns_identifiers(mock_g
     mock_client.describe_log_groups.assert_called_once_with(
         limit=50,
         includeLinkedAccounts=True,
-        logGroupNamePrefix="/aws/lambda",
+        logGroupNamePattern="/aws/lambda",
     )
     assert result.log_groups[0].identifier == source_arn.removesuffix(":*")
     assert result.log_groups[0].account_id == "222222222222"

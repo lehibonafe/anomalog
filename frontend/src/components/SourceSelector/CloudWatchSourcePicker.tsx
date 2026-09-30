@@ -5,8 +5,8 @@ import { useLogGroups } from "../../hooks/useLogGroups";
 import { useSelectionStore } from "../../state/selectionStore";
 
 export function CloudWatchSourcePicker() {
-  const [prefix, setPrefix] = useState("");
-  const debouncedPrefix = useDebouncedValue(prefix, 300);
+  const [keyword, setKeyword] = useState("");
+  const debouncedKeyword = useDebouncedValue(keyword, 300);
   const {
     data,
     isLoading,
@@ -14,7 +14,7 @@ export function CloudWatchSourcePicker() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useLogGroups(debouncedPrefix);
+  } = useLogGroups(debouncedKeyword);
   const logGroups = data?.pages.flatMap((page) => page.log_groups) ?? [];
 
   const logGroupNames = useSelectionStore((s) => s.logGroupNames);
@@ -40,9 +40,9 @@ export function CloudWatchSourcePicker() {
       </div>
       <input
         type="text"
-        placeholder="Filter by prefix..."
-        value={prefix}
-        onChange={(e) => setPrefix(e.target.value)}
+        placeholder="Filter by keyword..."
+        value={keyword}
+        onChange={(e) => setKeyword(e.target.value)}
       />
       {isLoading && <p className="hint">Loading log groups...</p>}
       {error && <p className="error-text">Failed to load log groups.</p>}

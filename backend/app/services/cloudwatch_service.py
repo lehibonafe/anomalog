@@ -59,7 +59,7 @@ def _decode_cursor(cursor: str | None) -> dict[str, str]:
 
 
 def list_log_groups(
-    prefix: str | None,
+    keyword: str | None,
     next_token: str | None,
     limit: int,
     settings: Settings,
@@ -68,8 +68,8 @@ def list_log_groups(
     kwargs: dict = {"limit": limit}
     if settings.aws_include_linked_accounts:
         kwargs["includeLinkedAccounts"] = True
-    if prefix:
-        kwargs["logGroupNamePrefix"] = prefix
+    if keyword:
+        kwargs["logGroupNamePattern"] = keyword
     if next_token:
         kwargs["nextToken"] = next_token
     resp = client.describe_log_groups(**kwargs)

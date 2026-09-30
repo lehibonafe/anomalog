@@ -28,12 +28,20 @@ class LiveTailStartRequest(BaseModel):
 
 @router.get("/log-groups", response_model=LogGroupsResponse)
 def get_log_groups(
+    keyword: str | None = Query(default=None),
     prefix: str | None = Query(default=None),
     next_token: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=50),
     settings: Settings = Depends(get_settings),
 ):
-    return cloudwatch_service.list_log_groups(prefix, next_token, limit, settings)
+    # Keep `prefix` as a compatibility alias for older frontends, but apply
+    # substring matching for both parameters.
+    return cloudwatch_service.list_log_groups(
+        keyword if keyword is not None else prefix,
+        next_token,
+        limit,
+        settings,
+    )
 
 
 @router.post("/logs/search", response_model=CloudWatchSearchResponse)

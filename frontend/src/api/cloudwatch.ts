@@ -7,11 +7,11 @@ import type {
 } from "./types";
 
 export async function fetchLogGroups(
-  prefix?: string,
+  keyword?: string,
   nextToken?: string
 ): Promise<LogGroupsResponse> {
   const { data } = await apiClient.get<LogGroupsResponse>("/api/cloudwatch/log-groups", {
-    params: { prefix: prefix || undefined, next_token: nextToken },
+    params: { keyword: keyword || undefined, next_token: nextToken },
   });
   return data;
 }
