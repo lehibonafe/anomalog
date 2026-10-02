@@ -5,11 +5,24 @@ from datetime import datetime, timedelta, timezone
 from app.config import Settings
 from app.core.aws_session import get_cloudtrail_client, get_logs_client
 from app.core.errors import BadRequestError
-from app.schemas.cloudtrail import CloudTrailSearchResponse, LookupAttributeKey
+from app.schemas.cloudtrail import (
+    CloudTrailAccountId,
+    CloudTrailSearchResponse,
+    LookupAttributeKey,
+)
 from app.schemas.common import LogEvent
 from app.services.masking import mask_messages_batch
 
 _PAGE_SIZE = 50
+
+_CLOUDTRAIL_ACCOUNT_LOG_GROUPS: dict[CloudTrailAccountId, tuple[str, str]] = {
+    "887350548529": ("ETAP DEVOPS", "aws-cloudtrail-logs-887350548529-f604b9db"),
+    "065031412132": ("ETAP ECPAY", "aws-cloudtrail-logs-065031412132-e541306b"),
+    "221315724874": ("ETAP INC", "aws-cloudtrail-logs-221315724874-03b2f0ba"),
+    "550222016520": ("ETAP MONITORING", "MONITORING-CLOUDTRAIL-EVENTS-LOGS"),
+    "679437835821": ("ETAP SRE", "aws-cloudtrail-logs-679437835821-c90511d5"),
+    "765186506449": ("ETAP SYSOPS", "aws-cloudtrail-logs-765186506449-5913834d"),
+}
 
 _LOOKUP_FIELD_PATHS: dict[LookupAttributeKey, tuple[str, ...]] = {
     "EventId": ("$.eventID",),
@@ -32,6 +45,53 @@ def _configured_log_groups(settings: Settings) -> list[str]:
         for identifier in (settings.cloudtrail_log_group_identifiers or "").split(",")
         if identifier.strip()
     ]
+
+
+def _account_id_from_arn(arn: str) -> str | None:
+    parts = arn.split(":", 5)
+    return parts[4] if len(parts) == 6 else None
+
+
+def _discover_log_groups(
+    client,
+    account_id: CloudTrailAccountId | None,
+) -> list[str]:
+    targets = (
+        {account_id: _CLOUDTRAIL_ACCOUNT_LOG_GROUPS[account_id]}
+        if account_id
+        else _CLOUDTRAIL_ACCOUNT_LOG_GROUPS
+    )
+    discovered: dict[str, str] = {}
+
+    for expected_account_id, (account_name, log_group_name) in targets.items():
+        next_token = None
+        while True:
+            kwargs: dict = {
+                "includeLinkedAccounts": True,
+                "logGroupNamePattern": log_group_name,
+                "limit": 50,
+            }
+            if next_token:
+                kwargs["nextToken"] = next_token
+            response = client.describe_log_groups(**kwargs)
+            for group in response.get("logGroups", []):
+                arn = group.get("logGroupArn") or group.get("arn", "")
+                if (
+                    group.get("logGroupName") == log_group_name
+                    and _account_id_from_arn(arn) == expected_account_id
+                ):
+                    discovered[expected_account_id] = arn.removesuffix(":*")
+            next_token = response.get("nextToken")
+            if not next_token:
+                break
+
+        if expected_account_id not in discovered:
+            raise BadRequestError(
+                f"CloudTrail log group not found for {account_name} "
+                f"({expected_account_id}): {log_group_name}."
+            )
+
+    return list(discovered.values())
 
 
 def _log_group_parameter(identifier: str) -> dict[str, str]:
@@ -57,22 +117,32 @@ def _decode_cursor(cursor: str | None) -> dict[str, str]:
 def _filter_pattern(
     lookup_attribute_key: LookupAttributeKey | None,
     lookup_attribute_value: str | None,
+    account_id: CloudTrailAccountId | None = None,
 ) -> str | None:
-    if not lookup_attribute_key or not lookup_attribute_value:
+    conditions: list[str] = []
+    if account_id:
+        conditions.append(f"($.recipientAccountId = {json.dumps(account_id)})")
+
+    if lookup_attribute_key and lookup_attribute_value:
+        if lookup_attribute_key == "ReadOnly" and lookup_attribute_value.lower() in {
+            "true",
+            "false",
+        }:
+            conditions.append(f"($.readOnly IS {lookup_attribute_value.upper()})")
+        else:
+            value = json.dumps(lookup_attribute_value)
+            comparisons = [
+                f"({path} = {value})"
+                for path in _LOOKUP_FIELD_PATHS[lookup_attribute_key]
+            ]
+            if len(comparisons) == 1:
+                conditions.append(comparisons[0])
+            else:
+                conditions.append("(" + " || ".join(comparisons) + ")")
+
+    if not conditions:
         return None
-
-    if lookup_attribute_key == "ReadOnly" and lookup_attribute_value.lower() in {
-        "true",
-        "false",
-    }:
-        return f"{{ $.readOnly IS {lookup_attribute_value.upper()} }}"
-    else:
-        value = json.dumps(lookup_attribute_value)
-
-    comparisons = [
-        f"({path} = {value})" for path in _LOOKUP_FIELD_PATHS[lookup_attribute_key]
-    ]
-    return "{ " + " || ".join(comparisons) + " }"
+    return "{ " + " && ".join(conditions) + " }"
 
 
 def _parse_cloudtrail_message(
@@ -121,9 +191,14 @@ def search_events(
     limit: int,
     cursor: str | None,
     settings: Settings,
+    account_id: CloudTrailAccountId | None = None,
 ) -> CloudTrailSearchResponse:
     """Search centralized CloudTrail logs when configured, else event history."""
     log_groups = _configured_log_groups(settings)
+    if not log_groups and settings.aws_include_linked_accounts:
+        # A continuation cursor already contains the exact group ARNs, so only
+        # discover on the first page of a search.
+        log_groups = [] if cursor else _discover_log_groups(get_logs_client(), account_id)
     if log_groups:
         return search_centralized_events(
             log_groups=log_groups,
@@ -134,6 +209,23 @@ def search_events(
             limit=limit,
             cursor=cursor,
             settings=settings,
+            account_id=account_id,
+        )
+    if cursor and settings.aws_include_linked_accounts:
+        return search_centralized_events(
+            log_groups=[],
+            start_time=start_time,
+            end_time=end_time,
+            lookup_attribute_key=lookup_attribute_key,
+            lookup_attribute_value=lookup_attribute_value,
+            limit=limit,
+            cursor=cursor,
+            settings=settings,
+            account_id=account_id,
+        )
+    if account_id:
+        raise BadRequestError(
+            "CloudTrail account selection requires centralized CloudWatch log groups."
         )
     return lookup_events(
         start_time=start_time,
@@ -155,6 +247,7 @@ def search_centralized_events(
     limit: int,
     cursor: str | None,
     settings: Settings,
+    account_id: CloudTrailAccountId | None = None,
 ) -> CloudTrailSearchResponse:
     max_range = timedelta(days=settings.max_time_range_days)
     if end_time - start_time > max_range:
@@ -169,7 +262,11 @@ def search_centralized_events(
     effective_limit = min(limit, settings.max_log_search_lines)
     tokens = _decode_cursor(cursor)
     active_groups = list(tokens) if cursor else list(dict.fromkeys(log_groups))
-    pattern = _filter_pattern(lookup_attribute_key, lookup_attribute_value)
+    pattern = _filter_pattern(
+        lookup_attribute_key,
+        lookup_attribute_value,
+        account_id,
+    )
 
     raw_entries: list[tuple[str, datetime | None, str, str]] = []
     next_tokens: dict[str, str] = {}

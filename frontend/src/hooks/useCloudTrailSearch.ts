@@ -18,10 +18,13 @@ export function useCloudTrailSearch() {
       if (variables.cursor) {
         appendEvents(data.events);
       } else {
+        const accountPart = variables.account_id
+          ? `, account=${variables.account_id}`
+          : ", all accounts";
         const attrPart = variables.lookup_attribute_key
           ? `, ${variables.lookup_attribute_key}=${variables.lookup_attribute_value}`
           : "";
-        const description = `CloudTrail (${variables.start_time} → ${variables.end_time}${attrPart})`;
+        const description = `CloudTrail (${variables.start_time} → ${variables.end_time}${accountPart}${attrPart})`;
         setEvents(data.events, description);
       }
 

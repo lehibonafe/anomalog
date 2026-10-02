@@ -9,6 +9,7 @@ export function CloudTrailSearchBar() {
   const sourceMode = useSelectionStore((s) => s.sourceMode);
   const startTime = useSelectionStore((s) => s.startTime);
   const endTime = useSelectionStore((s) => s.endTime);
+  const accountId = useSelectionStore((s) => s.cloudTrailAccountId);
   const attributeKey = useSelectionStore((s) => s.cloudTrailAttributeKey);
   const attributeValue = useSelectionStore((s) => s.cloudTrailAttributeValue);
 
@@ -26,6 +27,7 @@ export function CloudTrailSearchBar() {
     const request: CloudTrailSearchRequest = {
       start_time: startTime,
       end_time: endTime,
+      account_id: accountId || null,
       lookup_attribute_key: attributeKey || null,
       lookup_attribute_value: attributeValue.trim() || null,
     };

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import type { CloudTrailLookupAttributeKey, CloudTrailSearchRequest, CloudWatchSearchRequest, LogEvent } from "../api/types";
+import type { CloudTrailAccountId, CloudTrailLookupAttributeKey, CloudTrailSearchRequest, CloudWatchSearchRequest, LogEvent } from "../api/types";
 
 export type SourceMode = "cloudwatch" | "cloudtrail";
 export type LlmProvider = "gemini" | "openai" | "anthropic" | "ollama" | "litellm";
@@ -25,6 +25,7 @@ interface SelectionState {
   startTime: string;
   endTime: string;
   filterPattern: string;
+  cloudTrailAccountId: CloudTrailAccountId | "";
   cloudTrailAttributeKey: CloudTrailLookupAttributeKey | "";
   cloudTrailAttributeValue: string;
   events: LogEvent[];
@@ -41,6 +42,7 @@ interface SelectionState {
   setLogGroupNames: (names: string[]) => void;
   setTimeRange: (start: string, end: string) => void;
   setFilterPattern: (pattern: string) => void;
+  setCloudTrailAccountId: (accountId: CloudTrailAccountId | "") => void;
   setCloudTrailAttributeKey: (key: CloudTrailLookupAttributeKey | "") => void;
   setCloudTrailAttributeValue: (value: string) => void;
   setEvents: (events: LogEvent[], sourceDescription: string) => void;
@@ -60,6 +62,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   startTime: "",
   endTime: "",
   filterPattern: "",
+  cloudTrailAccountId: "",
   cloudTrailAttributeKey: "",
   cloudTrailAttributeValue: "",
   events: [],
@@ -76,6 +79,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   setLogGroupNames: (names) => set({ logGroupNames: names }),
   setTimeRange: (start, end) => set({ startTime: start, endTime: end }),
   setFilterPattern: (pattern) => set({ filterPattern: pattern }),
+  setCloudTrailAccountId: (accountId) => set({ cloudTrailAccountId: accountId }),
   setCloudTrailAttributeKey: (key) => set({ cloudTrailAttributeKey: key }),
   setCloudTrailAttributeValue: (value) => set({ cloudTrailAttributeValue: value }),
   setEvents: (events, sourceDescription) =>

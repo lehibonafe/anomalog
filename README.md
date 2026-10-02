@@ -306,7 +306,6 @@ configure the app to assume a read role in B and enable linked-account discovery
 ```bash
 AWS_ROLE_ARN=arn:aws:iam::MONITORING_ACCOUNT_ID:role/AnomalogMonitoringReadRole \
 AWS_INCLUDE_LINKED_ACCOUNTS=true \
-CLOUDTRAIL_LOG_GROUP_IDENTIFIERS=/aws/cloudtrail/organization \
 ./update-ec2.sh
 ```
 
@@ -356,14 +355,22 @@ destination naming pattern containing `${source.accountId}`, such as
 `/centralized/${source.accountId}${source.logGroup}`, when the source account
 must remain identifiable in the app.
 
-Set `CLOUDTRAIL_LOG_GROUP_IDENTIFIERS` to a comma-separated list of CloudWatch
-Logs group names or ARNs that receive organization CloudTrail events. The
-CloudTrail tab then searches those groups, preserves its attribute filters, and
-labels each event from its `recipientAccountId` and `awsRegion`. The monitoring
-role needs `logs:FilterLogEvents` on every configured group. If the variable is
-unset, the tab falls back to `LookupEvents`, which AWS limits to the assumed
-account's current Region and 90-day event history; an organization trail does
-not merge member events into that history.
+With `AWS_INCLUDE_LINKED_ACCOUNTS=true`, the CloudTrail tab automatically
+discovers the six ETAP CloudTrail log groups in the monitoring account and its
+OAM-linked source accounts. It searches the selected account's group or all six
+groups, preserves its attribute filters, and labels each event from its
+`recipientAccountId` and `awsRegion`. The monitoring role needs
+`logs:DescribeLogGroups` and `logs:FilterLogEvents`. Set
+`CLOUDTRAIL_LOG_GROUP_IDENTIFIERS` to a comma-separated list of CloudWatch Logs
+group names or ARNs only when an explicit override is needed. If linked-account
+mode and the override are both unset, the tab falls back to `LookupEvents`,
+which AWS limits to the assumed account's current Region and 90-day event
+history.
+
+The CloudTrail account selector defaults to **All accounts** and can restrict a
+search to ETAP DEVOPS, ECPAY, INC, MONITORING, SRE, or SYSOPS. Account filtering
+uses the CloudTrail event's `recipientAccountId` field and therefore requires
+the centralized CloudWatch Logs mode.
 
 The app has **no authentication** — restrict access at the network layer
 (security group scoped to your IP, VPN, or an authenticated reverse proxy).

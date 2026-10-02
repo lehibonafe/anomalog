@@ -145,6 +145,93 @@ def test_search_events_reads_configured_centralized_groups(
     assert "***MASKED***" in result.events[1].message
 
 
+@patch("app.services.cloudtrail_service.get_cloudtrail_client")
+@patch("app.services.cloudtrail_service.get_logs_client")
+def test_search_events_discovers_selected_linked_account_group(
+    mock_get_logs_client,
+    mock_get_cloudtrail_client,
+):
+    mock_client = MagicMock()
+    mock_get_logs_client.return_value = mock_client
+    group_name = "aws-cloudtrail-logs-065031412132-e541306b"
+    group_arn = (
+        "arn:aws:logs:ap-southeast-1:065031412132:"
+        f"log-group:{group_name}:*"
+    )
+    mock_client.describe_log_groups.return_value = {
+        "logGroups": [
+            {
+                "logGroupName": group_name,
+                "arn": group_arn,
+            }
+        ]
+    }
+    mock_client.filter_log_events.return_value = {"events": []}
+
+    cloudtrail_service.search_events(
+        start_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        end_time=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        lookup_attribute_key=None,
+        lookup_attribute_value=None,
+        limit=100,
+        cursor=None,
+        settings=make_settings(aws_include_linked_accounts=True),
+        account_id="065031412132",
+    )
+
+    mock_client.describe_log_groups.assert_called_once_with(
+        includeLinkedAccounts=True,
+        logGroupNamePattern=group_name,
+        limit=50,
+    )
+    search_kwargs = mock_client.filter_log_events.call_args.kwargs
+    assert search_kwargs["logGroupIdentifier"] == group_arn.removesuffix(":*")
+    assert search_kwargs["filterPattern"] == (
+        '{ ($.recipientAccountId = "065031412132") }'
+    )
+    mock_get_cloudtrail_client.assert_not_called()
+
+
+def test_discovery_finds_all_six_account_groups():
+    mock_client = MagicMock()
+    expected_arns = []
+
+    def describe_log_groups(logGroupNamePattern, **kwargs):
+        for account_id, (_account_name, group_name) in (
+            cloudtrail_service._CLOUDTRAIL_ACCOUNT_LOG_GROUPS.items()
+        ):
+            if group_name == logGroupNamePattern:
+                arn = (
+                    f"arn:aws:logs:ap-southeast-1:{account_id}:"
+                    f"log-group:{group_name}:*"
+                )
+                expected_arns.append(arn.removesuffix(":*"))
+                return {
+                    "logGroups": [
+                        {
+                            "logGroupName": group_name,
+                            "arn": arn,
+                        }
+                    ]
+                }
+        return {"logGroups": []}
+
+    mock_client.describe_log_groups.side_effect = describe_log_groups
+
+    result = cloudtrail_service._discover_log_groups(mock_client, None)
+
+    assert result == expected_arns
+    assert mock_client.describe_log_groups.call_count == 6
+
+
+def test_discovery_rejects_missing_account_group():
+    mock_client = MagicMock()
+    mock_client.describe_log_groups.return_value = {"logGroups": []}
+
+    with pytest.raises(BadRequestError, match="ETAP SRE"):
+        cloudtrail_service._discover_log_groups(mock_client, "679437835821")
+
+
 @patch("app.services.cloudtrail_service.get_logs_client")
 def test_centralized_search_preserves_multi_group_pagination(mock_get_client):
     data = {
@@ -195,8 +282,45 @@ def test_centralized_search_preserves_multi_group_pagination(mock_get_client):
 
 def test_centralized_read_only_filter_uses_json_boolean():
     assert cloudtrail_service._filter_pattern("ReadOnly", "TRUE") == (
-        "{ $.readOnly IS TRUE }"
+        "{ ($.readOnly IS TRUE) }"
     )
+
+
+def test_centralized_filter_combines_account_and_lookup_attribute():
+    assert cloudtrail_service._filter_pattern(
+        "Username",
+        "deployment-role",
+        "065031412132",
+    ) == (
+        '{ ($.recipientAccountId = "065031412132") && '
+        '(($.userIdentity.userName = "deployment-role") || '
+        '($.userIdentity.sessionContext.sessionIssuer.userName = "deployment-role")) }'
+    )
+
+
+def test_centralized_filter_supports_account_without_lookup_attribute():
+    assert cloudtrail_service._filter_pattern(
+        None,
+        None,
+        "550222016520",
+    ) == '{ ($.recipientAccountId = "550222016520") }'
+
+
+@patch("app.services.cloudtrail_service.get_cloudtrail_client")
+def test_account_selection_requires_centralized_log_groups(mock_get_client):
+    with pytest.raises(BadRequestError, match="requires centralized CloudWatch"):
+        cloudtrail_service.search_events(
+            start_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            end_time=datetime(2026, 1, 2, tzinfo=timezone.utc),
+            lookup_attribute_key=None,
+            lookup_attribute_value=None,
+            limit=100,
+            cursor=None,
+            settings=make_settings(),
+            account_id="887350548529",
+        )
+
+    mock_get_client.assert_not_called()
 
 
 @patch("app.services.cloudtrail_service.get_cloudtrail_client")

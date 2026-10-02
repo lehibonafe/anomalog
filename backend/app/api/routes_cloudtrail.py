@@ -15,6 +15,7 @@ def search_events(
     return cloudtrail_service.search_events(
         start_time=request.start_time,
         end_time=request.end_time,
+        account_id=request.account_id,
         lookup_attribute_key=request.lookup_attribute_key,
         lookup_attribute_value=request.lookup_attribute_value,
         limit=request.limit,

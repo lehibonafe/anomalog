@@ -66,9 +66,18 @@ export type CloudTrailLookupAttributeKey =
   | "EventSource"
   | "AccessKeyId";
 
+export type CloudTrailAccountId =
+  | "887350548529"
+  | "065031412132"
+  | "221315724874"
+  | "550222016520"
+  | "679437835821"
+  | "765186506449";
+
 export interface CloudTrailSearchRequest {
   start_time: string;
   end_time: string;
+  account_id?: CloudTrailAccountId | null;
   lookup_attribute_key?: CloudTrailLookupAttributeKey | null;
   lookup_attribute_value?: string | null;
   limit?: number;
