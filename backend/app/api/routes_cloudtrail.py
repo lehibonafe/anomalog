@@ -12,7 +12,7 @@ def search_events(
     request: CloudTrailSearchRequest,
     settings: Settings = Depends(get_settings),
 ):
-    return cloudtrail_service.lookup_events(
+    return cloudtrail_service.search_events(
         start_time=request.start_time,
         end_time=request.end_time,
         lookup_attribute_key=request.lookup_attribute_key,

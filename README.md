@@ -306,6 +306,7 @@ configure the app to assume a read role in B and enable linked-account discovery
 ```bash
 AWS_ROLE_ARN=arn:aws:iam::MONITORING_ACCOUNT_ID:role/AnomalogMonitoringReadRole \
 AWS_INCLUDE_LINKED_ACCOUNTS=true \
+CLOUDTRAIL_LOG_GROUP_IDENTIFIERS=/aws/cloudtrail/organization \
 ./update-ec2.sh
 ```
 
@@ -355,11 +356,14 @@ destination naming pattern containing `${source.accountId}`, such as
 `/centralized/${source.accountId}${source.logGroup}`, when the source account
 must remain identifiable in the app.
 
-The CloudTrail tab uses `LookupEvents`, which AWS limits to one account and one
-Region; an organization trail does not merge member events into B's event
-history. To inspect centralized organization CloudTrail events in Anomalog,
-deliver the trail to a CloudWatch Logs group and select that group in the
-CloudWatch tab. CloudTrail Lake support would require a separate query path.
+Set `CLOUDTRAIL_LOG_GROUP_IDENTIFIERS` to a comma-separated list of CloudWatch
+Logs group names or ARNs that receive organization CloudTrail events. The
+CloudTrail tab then searches those groups, preserves its attribute filters, and
+labels each event from its `recipientAccountId` and `awsRegion`. The monitoring
+role needs `logs:FilterLogEvents` on every configured group. If the variable is
+unset, the tab falls back to `LookupEvents`, which AWS limits to the assumed
+account's current Region and 90-day event history; an organization trail does
+not merge member events into that history.
 
 The app has **no authentication** — restrict access at the network layer
 (security group scoped to your IP, VPN, or an authenticated reverse proxy).

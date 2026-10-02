@@ -139,6 +139,9 @@ fi
 if [ -n "${AWS_INCLUDE_LINKED_ACCOUNTS:-}" ]; then
   set_kv backend/.env AWS_INCLUDE_LINKED_ACCOUNTS "$AWS_INCLUDE_LINKED_ACCOUNTS"
 fi
+if [ -n "${CLOUDTRAIL_LOG_GROUP_IDENTIFIERS:-}" ]; then
+  set_kv backend/.env CLOUDTRAIL_LOG_GROUP_IDENTIFIERS "$CLOUDTRAIL_LOG_GROUP_IDENTIFIERS"
+fi
 
 # A blank AWS_PROFILE= line breaks boto3 in Docker (env_file exports it as an
 # empty-string env var). The backend also guards against this in code, but

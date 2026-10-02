@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     aws_role_external_id: str | None = None
     aws_role_session_name: str = "anomalog"
     aws_include_linked_accounts: bool = False
+    # Comma-separated names or ARNs for centralized CloudTrail CloudWatch Logs
+    # groups. When set, the CloudTrail tab searches these instead of the
+    # monitoring account's regional CloudTrail event history.
+    cloudtrail_log_group_identifiers: str | None = None
 
     # LiteLLM (default provider — team's internal proxy)
     litellm_api_key: str

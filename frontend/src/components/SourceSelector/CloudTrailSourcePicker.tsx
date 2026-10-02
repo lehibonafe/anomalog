@@ -20,10 +20,10 @@ export function CloudTrailSourcePicker() {
 
   return (
     <div className="panel-section">
-      <div className="panel-section-title">CloudTrail event history</div>
+      <div className="panel-section-title">CloudTrail events</div>
       <p className="hint">
-        Filter by an attribute (optional) — leave blank to fetch every event in the time
-        range.
+        Search centralized organization events when configured. Filter by an attribute
+        or leave blank to fetch every event in the time range.
       </p>
       <div className="custom-range-row">
         <label>
