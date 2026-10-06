@@ -4,6 +4,10 @@ These files describe observable behavior and constraints for changes to Anomalog
 
 | Area | Specification |
 | --- | --- |
+| Frontend application | [frontend.md](frontend.md) |
+| Backend service | [backend.md](backend.md) |
+| Runtime configuration | [configuration.md](configuration.md) |
+| AWS IAM and cross-account setup | [iam_setup.md](iam_setup.md) |
 | Log search and pagination | [log-search.md](log-search.md) |
 | Live streaming | [live-tail.md](live-tail.md) |
 | Viewer and analytics | [log-exploration.md](log-exploration.md) |

@@ -396,7 +396,9 @@ that:
 - Live Tail is denied unless the backend role is explicitly allowed to start
   and stop it. The monitoring role also needs OAM read permissions to discover
   source-account links. Scope the log-group resources to the groups Anomalog
-  may access:
+  may access. `logs:StopLiveTail` and the regional CloudTrail fallback
+  `cloudtrail:LookupEvents` require wildcard resource scope, separate from
+  log-group-scoped permissions:
 
   ```json
   {
@@ -419,17 +421,21 @@ that:
         "Effect": "Allow",
         "Action": [
           "logs:FilterLogEvents",
-          "logs:StartLiveTail",
-          "logs:StopLiveTail"
+          "logs:StartLiveTail"
         ],
         "Resource": "arn:aws:logs:REGION:ACCOUNT_ID:log-group:ALLOWED_PREFIX*"
+      },
+      {
+        "Effect": "Allow",
+        "Action": ["logs:StopLiveTail", "cloudtrail:LookupEvents"],
+        "Resource": "*"
       }
     ]
   }
   ```
 
-  See [CloudWatch Live Tail](#cloudwatch-live-tail) for its runtime and cost
-  configuration.
+  See [IAM setup](specs/iam_setup.md) for mode-specific policy guidance and
+  [CloudWatch Live Tail](#cloudwatch-live-tail) for runtime and cost settings.
 - `.env` changes require a container recreate (`docker compose up -d`), not
   `docker compose restart`.
 
