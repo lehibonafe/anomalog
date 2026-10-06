@@ -1,5 +1,3 @@
-import base64
-import json
 from datetime import datetime, timedelta, timezone
 
 from app.config import Settings
@@ -12,6 +10,7 @@ from app.schemas.cloudwatch import (
 )
 from app.schemas.common import LogEvent
 from app.services.masking import mask_messages_batch
+from app.services.group_pagination import cursor_tokens, merge_group_pages
 
 
 def _ms_to_dt(ms: int | None) -> datetime | None:
@@ -44,18 +43,8 @@ def _log_group_parameter(identifier: str) -> dict[str, str]:
     return {"logGroupName": identifier}
 
 
-def _encode_cursor(tokens: dict[str, str]) -> str | None:
-    if not tokens:
-        return None
-    raw = json.dumps(tokens).encode()
-    return base64.urlsafe_b64encode(raw).decode()
-
-
 def _decode_cursor(cursor: str | None) -> dict[str, str]:
-    if not cursor:
-        return {}
-    raw = base64.urlsafe_b64decode(cursor.encode())
-    return json.loads(raw)
+    return cursor_tokens(cursor)
 
 
 def list_log_groups(
@@ -113,66 +102,44 @@ def search_log_events(
     end_ms = int(end_time.timestamp() * 1000)
     effective_limit = min(limit, settings.max_log_search_lines)
 
-    if cursor:
-        tokens = _decode_cursor(cursor)
-        active_groups = list(tokens.keys())
-    else:
-        tokens = {}
-        active_groups = list(dict.fromkeys(log_group_names))
-
-    raw_entries: list[tuple[str, str, datetime | None, str]] = []
-    next_tokens: dict[str, str] = {}
-    for name in active_groups:
-        remaining = effective_limit - len(raw_entries)
-        if remaining <= 0:
-            # Empty token means this group has not been fetched yet.
-            next_tokens[name] = tokens.get(name, "")
-            continue
+    def fetch_page(name: str, token: str | None, page_limit: int) -> dict:
         kwargs: dict = {
             "startTime": start_ms,
             "endTime": end_ms,
-            "limit": min(remaining, 1000),
+            "limit": page_limit,
         }
         kwargs.update(_log_group_parameter(name))
         if filter_pattern:
             kwargs["filterPattern"] = filter_pattern
-        token = tokens.get(name)
         if token:
             kwargs["nextToken"] = token
-        resp = client.filter_log_events(**kwargs)
-        for e in resp.get("events", []):
-            raw_entries.append(
-                (
-                    name,
-                    e.get("logStreamName", ""),
-                    _ms_to_dt(e.get("timestamp")),
-                    e.get("message", ""),
+        return client.filter_log_events(**kwargs)
+
+    def convert_page(name: str, raw_events: list[dict]) -> list[LogEvent]:
+        masked = mask_messages_batch([event.get("message", "") for event in raw_events], settings)
+        return [
+            LogEvent(
+                source="cloudwatch",
+                origin=_display_log_group(name),
+                stream_or_key=event.get("logStreamName", ""),
+                timestamp=_ms_to_dt(event.get("timestamp")),
+                message=message,
+                line_index=0,
                 )
-            )
-        new_token = resp.get("nextToken")
-        if new_token:
-            next_tokens[name] = new_token
+            for event, message in zip(raw_events, masked)
+        ]
 
-    masked_messages = mask_messages_batch([r[3] for r in raw_entries], settings)
-    all_events: list[LogEvent] = [
-        LogEvent(
-            source="cloudwatch",
-            origin=_display_log_group(origin),
-            stream_or_key=stream,
-            timestamp=timestamp,
-            message=masked,
-            line_index=0,
-        )
-        for (origin, stream, timestamp, _raw), masked in zip(raw_entries, masked_messages)
-    ]
-
-    all_events.sort(key=lambda ev: ev.timestamp or datetime.min.replace(tzinfo=timezone.utc))
-    for i, ev in enumerate(all_events):
-        ev.line_index = i
+    all_events, next_cursor = merge_group_pages(
+        groups=log_group_names,
+        limit=effective_limit,
+        cursor=cursor,
+        fetch_page=fetch_page,
+        convert_page=convert_page,
+    )
 
     return CloudWatchSearchResponse(
         events=all_events,
-        cursor=_encode_cursor(next_tokens),
+        cursor=next_cursor,
         truncated=False,
         total_returned=len(all_events),
     )

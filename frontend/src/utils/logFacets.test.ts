@@ -50,3 +50,13 @@ describe('significant HTTP status codes', () => {
     expect(['102', '203', '300', '405', '501'].some(isSignificantHttpStatus)).toBe(false)
   })
 })
+
+describe('facet cache', () => {
+  it('reuses facets for an unchanged event and refreshes when its message changes', () => {
+    const log = event('{"status_code":503}')
+    const first = extractLogFacets(log)
+    expect(extractLogFacets(log)).toBe(first)
+    log.message = '{"status_code":200}'
+    expect(extractLogFacets(log).status).toBe('200')
+  })
+})

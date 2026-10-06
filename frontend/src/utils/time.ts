@@ -1,5 +1,3 @@
-import { differenceInMilliseconds, subDays, subHours, subMinutes } from "date-fns";
-
 export type TimePreset = "15m" | "1h" | "24h" | "7d";
 
 export const MAX_TIME_RANGE_DAYS = 7;
@@ -34,7 +32,7 @@ const singaporeChartTimeFormatter = new Intl.DateTimeFormat("en-GB", {
 
 export function exceedsMaxTimeRange(start: string, end: string): boolean {
   if (!start || !end) return false;
-  const ms = differenceInMilliseconds(new Date(end), new Date(start));
+  const ms = new Date(end).getTime() - new Date(start).getTime();
   return ms > MAX_TIME_RANGE_DAYS * 24 * 60 * 60 * 1000;
 }
 
@@ -45,22 +43,15 @@ export const TIME_PRESETS: { value: TimePreset; label: string }[] = [
   { value: "7d", label: "Last 7 days" },
 ];
 
+const PRESET_DURATION_MS: Record<TimePreset, number> = {
+  '15m': 15 * 60_000,
+  '1h': 60 * 60_000,
+  '24h': 24 * 60 * 60_000,
+  '7d': 7 * 24 * 60 * 60_000,
+};
+
 export function presetToRange(preset: TimePreset, now: Date): { start: string; end: string } {
-  let start: Date;
-  switch (preset) {
-    case "15m":
-      start = subMinutes(now, 15);
-      break;
-    case "1h":
-      start = subHours(now, 1);
-      break;
-    case "24h":
-      start = subHours(now, 24);
-      break;
-    case "7d":
-      start = subDays(now, 7);
-      break;
-  }
+  const start = new Date(now.getTime() - PRESET_DURATION_MS[preset]);
   return { start: start.toISOString(), end: now.toISOString() };
 }
 

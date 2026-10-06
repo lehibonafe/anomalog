@@ -12,9 +12,12 @@ export function useCloudWatchSearch() {
   return useMutation({
     mutationFn: (request: CloudWatchSearchRequest) => searchCloudWatchLogs(request),
     onMutate: (variables) => {
-      if (!variables.cursor) setCloudWatchNextRequest(null);
+      return variables.cursor
+        ? useSelectionStore.getState().searchGeneration
+        : useSelectionStore.getState().beginSearch("cloudwatch");
     },
-    onSuccess: (data, variables) => {
+    onSuccess: (data, variables, generation) => {
+      if (!useSelectionStore.getState().isCurrentSearch(generation, "cloudwatch")) return;
       if (variables.cursor) {
         appendEvents(data.events);
       } else {

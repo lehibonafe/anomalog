@@ -2,6 +2,7 @@ import { isAxiosError } from "axios";
 
 import type { CloudTrailSearchRequest } from "../../api/types";
 import { useCloudTrailSearch } from "../../hooks/useCloudTrailSearch";
+import { useAppConfig } from "../../hooks/useAppConfig";
 import { useSelectionStore } from "../../state/selectionStore";
 import { exceedsMaxTimeRange } from "../../utils/time";
 
@@ -14,6 +15,7 @@ export function CloudTrailSearchBar() {
   const attributeValue = useSelectionStore((s) => s.cloudTrailAttributeValue);
 
   const search = useCloudTrailSearch();
+  const { data: config } = useAppConfig();
 
   if (sourceMode !== "cloudtrail") {
     return null;
@@ -21,7 +23,8 @@ export function CloudTrailSearchBar() {
 
   const rangeTooLong = exceedsMaxTimeRange(startTime, endTime);
   const hasIncompleteAttribute = !!attributeKey !== !!attributeValue.trim();
-  const canSearch = !!startTime && !!endTime && !rangeTooLong && !hasIncompleteAttribute;
+  const canSearch = !!startTime && !!endTime && !rangeTooLong && !hasIncompleteAttribute
+    && (!accountId || config?.cloudtrail_account_filter_available === true);
 
   const runSearch = () => {
     const request: CloudTrailSearchRequest = {

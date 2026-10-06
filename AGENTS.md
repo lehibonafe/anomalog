@@ -22,7 +22,11 @@ Use four-space indentation and `snake_case` for Python functions, modules, and t
 
 ## Testing Guidelines
 
-Backend tests use pytest with async support. Name files `test_<feature>.py` and tests `test_<behavior>`. Run pytest as `python -m pytest` from `backend/`; target a case with `python -m pytest tests/test_log_filter.py::test_name`. Mock AWS and LLM SDK calls—tests must not make live requests. Add regression coverage for service, masking, pagination, and provider changes. The frontend currently has no test runner, so at minimum run `npm run lint` and `npm run build` for UI changes.
+Backend tests use pytest with async support. Name files `test_<feature>.py` and tests `test_<behavior>`. Run pytest as `python -m pytest` from `backend/`; target a case with `python -m pytest tests/test_log_filter.py::test_name`. Mock AWS and LLM SDK calls—tests must not make live requests. Add regression coverage for service, masking, pagination, and provider changes. Frontend utility tests use Vitest; run `npm run test`, `npm run lint`, and `npm run build` for UI changes.
+
+## Specification Workflow
+
+Read the relevant file in `specs/` before changing behavior, update its requirements and acceptance checks as part of the change, then implement and verify. Keep the root `api-reference.md` in sync with backend routes and schemas; the existing `api-reference_1.md` documents a separate masking service.
 
 ## Commit & Pull Request Guidelines
 

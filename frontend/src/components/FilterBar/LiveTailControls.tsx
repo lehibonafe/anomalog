@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
 
-import { cloudWatchLiveTailUrl, fetchLiveTailConfig } from '../../api/cloudwatch'
+import { cloudWatchLiveTailUrl, fetchAppConfig } from '../../api/cloudwatch'
 import type { LiveTailServerMessage, LogEvent } from '../../api/types'
 import { useSelectionStore } from '../../state/selectionStore'
 
@@ -25,7 +25,9 @@ export function LiveTailControls({ onRunningChange }: LiveTailControlsProps) {
   const logGroupNames = useSelectionStore((state) => state.logGroupNames)
   const filterPattern = useSelectionStore((state) => state.filterPattern)
   const setEvents = useSelectionStore((state) => state.setEvents)
-  const appendEvents = useSelectionStore((state) => state.appendEvents)
+  const appendLiveEvents = useSelectionStore((state) => state.appendLiveEvents)
+  const invalidateSearch = useSelectionStore((state) => state.invalidateSearch)
+  const droppedLiveEvents = useSelectionStore((state) => state.liveTailDroppedEvents)
   const socketRef = useRef<WebSocket | null>(null)
   const confirmationRef = useRef<HTMLDialogElement | null>(null)
   const startedAtRef = useRef<number | null>(null)
@@ -52,7 +54,7 @@ export function LiveTailControls({ onRunningChange }: LiveTailControlsProps) {
   useEffect(() => onRunningChange(running), [onRunningChange, running])
 
   useEffect(() => {
-    void fetchLiveTailConfig().then((config) => {
+    void fetchAppConfig().then((config) => {
       setInactivitySeconds(config.live_tail_inactivity_timeout_seconds)
       setCostPerMinute(config.live_tail_cost_per_minute_usd)
       setFreeTierMinutes(config.live_tail_free_tier_minutes)
@@ -148,6 +150,7 @@ export function LiveTailControls({ onRunningChange }: LiveTailControlsProps) {
         setInactivitySeconds(message.inactivity_timeout_seconds)
         setCostPerMinute(message.cost_per_minute_usd)
         setFreeTierMinutes(message.free_tier_minutes)
+        invalidateSearch()
         setEvents([], `CloudWatch Live Tail: ${selectedGroups.join(', ')}`)
         startedAtRef.current = Date.now()
         setStatus('active')
@@ -162,7 +165,7 @@ export function LiveTailControls({ onRunningChange }: LiveTailControlsProps) {
             setDroppedPausedEventCount((count) => count + overflow)
           }
         } else {
-          appendEvents(message.events)
+          appendLiveEvents(message.events)
         }
         if (message.sampled) setIsSampled(true)
       } else if (message.type === 'error') {
@@ -188,7 +191,7 @@ export function LiveTailControls({ onRunningChange }: LiveTailControlsProps) {
 
   function flushPausedEvents() {
     if (pausedEventsRef.current.length > 0) {
-      appendEvents(pausedEventsRef.current)
+      appendLiveEvents(pausedEventsRef.current)
       pausedEventsRef.current = []
     }
     setBufferedEventCount(0)
@@ -243,6 +246,9 @@ export function LiveTailControls({ onRunningChange }: LiveTailControlsProps) {
           )}
           {droppedPausedEventCount > 0 && (
             <p className='warning-text'>{droppedPausedEventCount.toLocaleString()} older paused event{droppedPausedEventCount === 1 ? '' : 's'} discarded after the {PAUSED_EVENT_BUFFER_LIMIT.toLocaleString()}-event buffer filled.</p>
+          )}
+          {droppedLiveEvents > 0 && (
+            <p className='warning-text'>{droppedLiveEvents.toLocaleString()} older event{droppedLiveEvents === 1 ? '' : 's'} removed from the displayed Live Tail history.</p>
           )}
           {isSampled && <p className='warning-text'>AWS is sampling this high-volume stream.</p>}
           <div className='live-tail-session-actions'>

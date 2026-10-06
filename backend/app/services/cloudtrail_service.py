@@ -1,4 +1,3 @@
-import base64
 import json
 from datetime import datetime, timedelta, timezone
 
@@ -12,6 +11,7 @@ from app.schemas.cloudtrail import (
 )
 from app.schemas.common import LogEvent
 from app.services.masking import mask_messages_batch
+from app.services.group_pagination import merge_group_pages
 
 _PAGE_SIZE = 50
 
@@ -98,20 +98,6 @@ def _log_group_parameter(identifier: str) -> dict[str, str]:
     if identifier.startswith("arn:"):
         return {"logGroupIdentifier": identifier.removesuffix(":*")}
     return {"logGroupName": identifier}
-
-
-def _encode_cursor(tokens: dict[str, str]) -> str | None:
-    if not tokens:
-        return None
-    raw = json.dumps(tokens).encode()
-    return base64.urlsafe_b64encode(raw).decode()
-
-
-def _decode_cursor(cursor: str | None) -> dict[str, str]:
-    if not cursor:
-        return {}
-    raw = base64.urlsafe_b64decode(cursor.encode())
-    return json.loads(raw)
 
 
 def _filter_pattern(
@@ -260,68 +246,59 @@ def search_centralized_events(
 
     client = get_logs_client()
     effective_limit = min(limit, settings.max_log_search_lines)
-    tokens = _decode_cursor(cursor)
-    active_groups = list(tokens) if cursor else list(dict.fromkeys(log_groups))
     pattern = _filter_pattern(
         lookup_attribute_key,
         lookup_attribute_value,
         account_id,
     )
 
-    raw_entries: list[tuple[str, datetime | None, str, str]] = []
-    next_tokens: dict[str, str] = {}
-    for log_group in active_groups:
-        remaining = effective_limit - len(raw_entries)
-        if remaining <= 0:
-            next_tokens[log_group] = tokens.get(log_group, "")
-            continue
-
+    def fetch_page(log_group: str, token: str | None, page_limit: int) -> dict:
         kwargs: dict = {
             "startTime": int(start_time.timestamp() * 1000),
             "endTime": int(end_time.timestamp() * 1000),
-            "limit": min(remaining, 1000),
+            "limit": page_limit,
         }
         kwargs.update(_log_group_parameter(log_group))
         if pattern:
             kwargs["filterPattern"] = pattern
-        token = tokens.get(log_group)
         if token:
             kwargs["nextToken"] = token
+        return client.filter_log_events(**kwargs)
 
-        response = client.filter_log_events(**kwargs)
-        for log_event in response.get("events", []):
+    def convert_page(log_group: str, raw_events: list[dict]) -> list[LogEvent]:
+        parsed = []
+        for log_event in raw_events:
             message = log_event.get("message", "")
             event_name, event_time, origin = _parse_cloudtrail_message(
                 message,
                 log_event.get("timestamp"),
                 log_group,
             )
-            raw_entries.append((event_name, event_time, origin, message))
-        next_token = response.get("nextToken")
-        if next_token:
-            next_tokens[log_group] = next_token
+            parsed.append((event_name, event_time, origin, message))
+        masked_messages = mask_messages_batch([entry[3] for entry in parsed], settings)
+        return [
+            LogEvent(
+                source="cloudtrail",
+                origin=origin,
+                stream_or_key=event_name,
+                timestamp=event_time,
+                message=masked,
+                line_index=0,
+            )
+            for (event_name, event_time, origin, _raw), masked in zip(parsed, masked_messages)
+        ]
 
-    masked_messages = mask_messages_batch([entry[3] for entry in raw_entries], settings)
-    events = [
-        LogEvent(
-            source="cloudtrail",
-            origin=origin,
-            stream_or_key=event_name,
-            timestamp=event_time,
-            message=masked,
-            line_index=0,
-        )
-        for (event_name, event_time, origin, _raw), masked in zip(
-            raw_entries, masked_messages
-        )
-    ]
-    events.sort(key=lambda event: event.timestamp or datetime.min.replace(tzinfo=timezone.utc))
-    for index, event in enumerate(events):
-        event.line_index = index
+    events, next_cursor = merge_group_pages(
+        groups=log_groups,
+        limit=effective_limit,
+        cursor=cursor,
+        fetch_page=fetch_page,
+        convert_page=convert_page,
+    )
 
     return CloudTrailSearchResponse(
         events=events,
-        cursor=_encode_cursor(next_tokens),
+        cursor=next_cursor,
         truncated=False,
         total_returned=len(events),
     )

@@ -100,7 +100,12 @@ function extractDuration(fields: Record<string, unknown>, message: string) {
   return durationRange(milliseconds)
 }
 
+const facetCache = new WeakMap<LogEvent, { message: string; facets: ExtractedLogFacets }>()
+
 export function extractLogFacets(event: LogEvent): ExtractedLogFacets {
+  const cached = facetCache.get(event)
+  if (cached?.message === event.message) return cached.facets
+
   const json = extractJson(event.message)
   const fields = flattenObject(json?.value)
   const request = event.message.match(REQUEST_RE)
@@ -119,7 +124,7 @@ export function extractLogFacets(event: LogEvent): ExtractedLogFacets {
   const route = rawRoute ? normalizeRoute(rawRoute) : undefined
   const duration = extractDuration(fields, event.message)
 
-  return {
+  const facets = {
     ...(level ? { level } : {}),
     ...(rawMethod ? { method: rawMethod.toUpperCase() } : {}),
     ...(route ? { route } : {}),
@@ -127,6 +132,8 @@ export function extractLogFacets(event: LogEvent): ExtractedLogFacets {
     ...(rawException ? { exception: rawException } : {}),
     ...(duration ? { duration } : {}),
   }
+  facetCache.set(event, { message: event.message, facets })
+  return facets
 }
 
 export function matchesLogFacets(facets: ExtractedLogFacets, selection: LogFacetSelection) {

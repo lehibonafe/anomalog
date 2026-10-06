@@ -277,13 +277,17 @@ export function LogViewer({
     });
   }, []);
 
+  const hasFacetFilter = useMemo(
+    () => Object.values(facetSelection).some((values) => values.length > 0),
+    [facetSelection],
+  );
   const keywordFilteredEvents = useMemo(() => {
     const term = keyword.trim().toLowerCase();
     return events.filter((event) => (
       (!term || event.message.toLowerCase().includes(term))
-      && matchesLogFacets(extractLogFacets(event), facetSelection)
+      && (!hasFacetFilter || matchesLogFacets(extractLogFacets(event), facetSelection))
     ));
-  }, [events, keyword, facetSelection]);
+  }, [events, keyword, facetSelection, hasFacetFilter]);
 
   const filteredEvents = useMemo(
     () => activeFinding

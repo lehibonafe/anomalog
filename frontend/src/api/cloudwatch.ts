@@ -2,7 +2,7 @@ import { apiClient } from "./client";
 import type {
   CloudWatchSearchRequest,
   CloudWatchSearchResponse,
-  LiveTailConfig,
+  AppConfig,
   LogGroupsResponse,
 } from "./types";
 
@@ -34,7 +34,7 @@ export function cloudWatchLiveTailUrl(): string {
   return url.toString();
 }
 
-export async function fetchLiveTailConfig(): Promise<LiveTailConfig> {
-  const { data } = await apiClient.get<LiveTailConfig>("/api/config");
+export async function fetchAppConfig(): Promise<AppConfig> {
+  const { data } = await apiClient.get<AppConfig>("/api/config");
   return data;
 }

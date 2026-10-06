@@ -49,7 +49,8 @@ export type LiveTailServerMessage =
   | { type: "session_stopped" | "session_ended"; reason: string }
   | { type: "error"; message: string };
 
-export interface LiveTailConfig {
+export interface AppConfig {
+  cloudtrail_account_filter_available: boolean;
   live_tail_max_concurrent_sessions: number;
   live_tail_inactivity_timeout_seconds: number;
   live_tail_cost_per_minute_usd: number;

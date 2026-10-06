@@ -31,6 +31,10 @@ LiteLLM defaults may also be changed server-side with `GEMINI_MODEL` and
 - `backend/` — FastAPI service. Talks to AWS (boto3) and the LLM provider SDKs.
 - `frontend/` — React + TypeScript (Vite) UI.
 
+Behavior specifications live in [`specs/`](specs/README.md). The app's HTTP and
+WebSocket contract is in [`api-reference.md`](api-reference.md); the similarly
+named `api-reference_1.md` covers the separate PII masking service.
+
 CloudWatch Live Tail uses a browser WebSocket connected to the FastAPI backend.
 The backend owns the billable AWS stream, masks each event, and forwards only
 the masked event to the browser. The browser never receives AWS credentials or

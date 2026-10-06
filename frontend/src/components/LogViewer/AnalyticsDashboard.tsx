@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { memo, useMemo } from 'react'
 
 import type { LogEvent } from '../../api/types'
 import type { Finding, FindingSeverity } from '../../utils/findings'
@@ -172,7 +172,7 @@ function StatusDonut({ events, activeFindingId, onSelectFinding }: InteractiveCh
   )
 }
 
-export function AnalyticsDashboard({ events, activeFindingId, onSelectFinding, facetSelection, onFacetChange }: AnalyticsDashboardProps) {
+export const AnalyticsDashboard = memo(function AnalyticsDashboard({ events, activeFindingId, onSelectFinding, facetSelection, onFacetChange }: AnalyticsDashboardProps) {
   const chartProps = { events, activeFindingId, onSelectFinding }
   return (
     <section className="analytics-dashboard" aria-label="Log analytics dashboard">
@@ -181,4 +181,4 @@ export function AnalyticsDashboard({ events, activeFindingId, onSelectFinding, f
       <article className="dashboard-card facets-card"><LogFacetFilters events={events} selection={facetSelection} onChange={onFacetChange} /></article>
     </section>
   )
-}
+})

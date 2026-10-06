@@ -3,10 +3,11 @@ import geminiLogo from '@lobehub/icons-static-svg/icons/gemini-color.svg'
 import liteLlmLogo from '@lobehub/icons-static-svg/icons/llmapi-color.svg'
 import ollamaLogo from '@lobehub/icons-static-svg/icons/ollama.svg'
 import openAiLogo from '@lobehub/icons-static-svg/icons/openai.svg'
-import { useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 
 import { useTestConnection } from '../../hooks/useTestConnection'
 import { DEFAULT_LLM_MODELS, type LlmProvider, useSelectionStore } from '../../state/selectionStore'
+import { modelDestination } from '../../utils/modelDestination'
 
 interface ProviderOption {
   value: LlmProvider
@@ -159,6 +160,11 @@ export function ModelSettingsPanel() {
   const llmBaseUrl = useSelectionStore((s) => s.llmBaseUrl);
   const setLlmBaseUrl = useSelectionStore((s) => s.setLlmBaseUrl);
   const testConnection = useTestConnection()
+  const resetTestConnection = testConnection.reset
+
+  useEffect(() => {
+    resetTestConnection()
+  }, [llmProvider, llmApiKey, llmModel, llmBaseUrl, resetTestConnection])
 
   return (
     <div className='model-settings-panel'>
@@ -215,6 +221,8 @@ export function ModelSettingsPanel() {
           />
         </label>
       )}
+
+      <p className="hint">Connection tests and analysis send requests to {modelDestination(llmProvider, llmBaseUrl)}.</p>
 
       <button
         type="button"

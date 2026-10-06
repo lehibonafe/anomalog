@@ -1,4 +1,7 @@
+import { useEffect } from "react";
+
 import type { CloudTrailAccountId, CloudTrailLookupAttributeKey } from "../../api/types";
+import { useAppConfig } from "../../hooks/useAppConfig";
 import { useSelectionStore } from "../../state/selectionStore";
 
 const CLOUDTRAIL_ACCOUNTS: Array<{ id: CloudTrailAccountId; name: string }> = [
@@ -28,19 +31,25 @@ export function CloudTrailSourcePicker() {
   const setAttributeKey = useSelectionStore((s) => s.setCloudTrailAttributeKey);
   const attributeValue = useSelectionStore((s) => s.cloudTrailAttributeValue);
   const setAttributeValue = useSelectionStore((s) => s.setCloudTrailAttributeValue);
+  const { data: config } = useAppConfig();
+  const accountFilterAvailable = config?.cloudtrail_account_filter_available === true;
+
+  useEffect(() => {
+    if (config && !accountFilterAvailable && accountId) setAccountId("");
+  }, [accountFilterAvailable, accountId, config, setAccountId]);
 
   return (
     <div className="panel-section">
       <div className="panel-section-title">CloudTrail events</div>
-      <p className="hint">
-        Search automatically discovered organization events by account and optional
-        attribute.
-      </p>
+      <p className="hint">{accountFilterAvailable
+        ? "Search organization events by account and optional attribute."
+        : "Search regional events by optional attribute. Account filtering requires centralized CloudTrail groups."}</p>
       <div className="custom-range-row">
         <label>
           Account
           <select
             value={accountId}
+            disabled={!accountFilterAvailable}
             onChange={(e) => setAccountId(e.target.value as CloudTrailAccountId | "")}
           >
             <option value="">All accounts</option>

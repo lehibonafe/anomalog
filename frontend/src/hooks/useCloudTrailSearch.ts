@@ -12,9 +12,12 @@ export function useCloudTrailSearch() {
   return useMutation({
     mutationFn: (request: CloudTrailSearchRequest) => searchCloudTrailEvents(request),
     onMutate: (variables) => {
-      if (!variables.cursor) setCloudTrailNextRequest(null);
+      return variables.cursor
+        ? useSelectionStore.getState().searchGeneration
+        : useSelectionStore.getState().beginSearch("cloudtrail");
     },
-    onSuccess: (data, variables) => {
+    onSuccess: (data, variables, generation) => {
+      if (!useSelectionStore.getState().isCurrentSearch(generation, "cloudtrail")) return;
       if (variables.cursor) {
         appendEvents(data.events);
       } else {

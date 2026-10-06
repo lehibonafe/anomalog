@@ -4,6 +4,7 @@ import { type FormEvent, useEffect, useRef, useState } from 'react'
 import type { AnalysisResponse, ChatMessage, LogEvent } from '../../api/types'
 import { useAnomalyAnalysis } from '../../hooks/useAnomalyAnalysis'
 import { useSelectionStore } from '../../state/selectionStore'
+import { modelDestination } from '../../utils/modelDestination'
 import { AnalysisResult } from './AnalysisResult'
 
 const INVESTIGATION_HISTORY_KEY = 'anomalog.investigation-history.v1'
@@ -401,6 +402,7 @@ export function LogSummary({ events }: LogSummaryProps) {
           <div>
             <h2 id='log-investigator-title'>AI Log Investigator</h2>
             <p>{availabilityText}</p>
+            <p>AI destination: {modelDestination(llmProvider, llmBaseUrl)}</p>
           </div>
         </div>
         {canOpenChat && (

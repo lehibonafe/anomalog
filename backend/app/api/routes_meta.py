@@ -39,6 +39,9 @@ def config(settings: Settings = Depends(get_settings)):
         "gemini_model": settings.gemini_model,
         "max_log_search_lines": settings.max_log_search_lines,
         "max_analysis_lines": settings.max_analysis_lines,
+        "cloudtrail_account_filter_available": bool(
+            settings.cloudtrail_log_group_identifiers or settings.aws_include_linked_accounts
+        ),
         "live_tail_max_concurrent_sessions": settings.live_tail_max_concurrent_sessions,
         "live_tail_inactivity_timeout_seconds": settings.live_tail_inactivity_timeout_seconds,
         "live_tail_cost_per_minute_usd": settings.live_tail_cost_per_minute_usd,
