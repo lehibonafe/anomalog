@@ -1,3 +1,4 @@
+import hashlib
 import json
 from datetime import datetime, timedelta, timezone
 
@@ -292,8 +293,13 @@ def search_centralized_events(
         groups=log_groups,
         limit=effective_limit,
         cursor=cursor,
+        query_key=hashlib.sha256(json.dumps([
+            int(start_time.timestamp() * 1000), int(end_time.timestamp() * 1000),
+            lookup_attribute_key, lookup_attribute_value, account_id,
+        ], separators=(",", ":")).encode()).hexdigest(),
         fetch_page=fetch_page,
         convert_page=convert_page,
+        remask_pending=lambda messages: mask_messages_batch(messages, settings),
     )
 
     return CloudTrailSearchResponse(
@@ -372,7 +378,12 @@ def lookup_events(
         for (event_name, timestamp, _raw), masked in zip(raw_entries, masked_messages)
     ]
 
-    all_events.sort(key=lambda ev: ev.timestamp or datetime.min.replace(tzinfo=timezone.utc))
+    # LookupEvents pages newest events first; keep that direction across
+    # continuation pages instead of reversing each page independently.
+    all_events.sort(
+        key=lambda ev: ev.timestamp or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
     for i, ev in enumerate(all_events):
         ev.line_index = i
 

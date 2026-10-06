@@ -42,9 +42,9 @@ def test_lookup_events_returns_masked_sorted_events(mock_get_client):
         settings=settings,
     )
 
-    assert [e.stream_or_key for e in result.events] == ["DeleteBucket", "ConsoleLogin"]
-    assert "jane.doe@example.com" not in result.events[1].message
-    assert "***MASKED***" in result.events[1].message
+    assert [e.stream_or_key for e in result.events] == ["ConsoleLogin", "DeleteBucket"]
+    assert "jane.doe@example.com" not in result.events[0].message
+    assert "***MASKED***" in result.events[0].message
     assert [e.line_index for e in result.events] == [0, 1]
     assert result.cursor is None
 
@@ -278,6 +278,70 @@ def test_centralized_search_preserves_multi_group_pagination(mock_get_client):
     assert sorted(event_names) == sorted(
         f"{group}-{index}" for group in data for index in range(3)
     )
+
+
+@patch("app.services.cloudtrail_service.get_logs_client")
+def test_centralized_groups_stay_ordered_across_pages(mock_get_client):
+    data = {
+        "group-a": [(1000, "a-first"), (3000, "a-last")],
+        "group-b": [(2000, "b-middle")],
+    }
+
+    def fetch(logGroupName, limit, nextToken="0", **kwargs):
+        start = int(nextToken)
+        page = data[logGroupName][start:start + limit]
+        response = {"events": [
+            {"timestamp": stamp, "message": f'{{"eventName":"{name}"}}'}
+            for stamp, name in page
+        ]}
+        if start + len(page) < len(data[logGroupName]):
+            response["nextToken"] = str(start + len(page))
+        return response
+
+    mock_get_client.return_value.filter_log_events.side_effect = fetch
+    settings = make_settings(cloudtrail_log_group_identifiers="group-a,group-b")
+    args = dict(
+        start_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        end_time=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        lookup_attribute_key=None,
+        lookup_attribute_value=None,
+        limit=2,
+        settings=settings,
+    )
+    first = cloudtrail_service.search_events(**args, cursor=None)
+    second = cloudtrail_service.search_events(**args, cursor=first.cursor)
+    assert [event.stream_or_key for event in first.events + second.events] == [
+        "a-first", "b-middle", "a-last"
+    ]
+
+
+@patch("app.services.cloudtrail_service.get_cloudtrail_client")
+def test_regional_pages_remain_newest_first(mock_get_client):
+    data = [
+        {"EventName": str(stamp), "EventTime": datetime.fromtimestamp(stamp, tz=timezone.utc)}
+        for stamp in (3000, 2000, 1000)
+    ]
+
+    def fetch(MaxResults, NextToken="0", **kwargs):
+        start = int(NextToken)
+        page = data[start:start + MaxResults]
+        result = {"Events": page}
+        if start + len(page) < len(data):
+            result["NextToken"] = str(start + len(page))
+        return result
+
+    mock_get_client.return_value.lookup_events.side_effect = fetch
+    args = dict(
+        start_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        end_time=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        lookup_attribute_key=None,
+        lookup_attribute_value=None,
+        limit=2,
+        settings=make_settings(),
+    )
+    first = cloudtrail_service.lookup_events(**args, cursor=None)
+    second = cloudtrail_service.lookup_events(**args, cursor=first.cursor)
+    assert [event.stream_or_key for event in first.events + second.events] == ["3000", "2000", "1000"]
 
 
 def test_centralized_read_only_filter_uses_json_boolean():

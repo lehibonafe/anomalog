@@ -24,7 +24,7 @@ This reference describes **Anomalog's own FastAPI service**. The existing [api-r
 }
 ```
 
-`source` is `cloudwatch` or `cloudtrail`; `timestamp` may be `null`. `line_index` is an integer assigned within a search response. The UI reindexes appended pages. For CloudTrail, `stream_or_key` is the event name and `origin` identifies CloudTrail or the centralized account/region.
+`source` is `cloudwatch` or `cloudtrail`; `timestamp` may be `null`. `line_index` is an integer assigned within a search response. The UI gives every appended event a unique increasing index, including events in a Live Tail batch. For CloudTrail, `stream_or_key` is the event name and `origin` identifies CloudTrail or the centralized account/region.
 
 ## Health, configuration, and masking
 
@@ -85,7 +85,7 @@ Request:
 
 `log_group_names`, `start_time`, and `end_time` are required. Group names or ARNs are accepted. `filter_pattern` and `cursor` default to `null`; `limit` defaults to `1000`, must be positive, and is capped by `MAX_LOG_SEARCH_LINES` (default `5000`). The maximum time span is `MAX_TIME_RANGE_DAYS` (default seven days).
 
-Response: `{"events":[LogEvent],"cursor":string|null,"truncated":false,"total_returned":integer}`. `events` are sorted by timestamp within the response. `truncated` is currently always `false`; use `cursor` to determine whether more pages are available.
+Response: `{"events":[LogEvent],"cursor":string|null,"truncated":false,"total_returned":integer}`. Events from selected groups are oldest-first across response pages. A cursor is bound to its original groups, time range, and filter; send it unchanged with those same request fields. Cursors issued before the merged pagination format must be replaced by a new search. AWS can return an empty page with a continuation cursor. `truncated` is currently always `false`; use `cursor` to determine whether more pages are available.
 
 ## CloudTrail
 
@@ -107,7 +107,7 @@ Request:
 
 Only the timestamps are required. Optional `lookup_attribute_key` values are `EventId`, `EventName`, `ReadOnly`, `Username`, `ResourceType`, `ResourceName`, `EventSource`, and `AccessKeyId`. `account_id` can be one of `887350548529`, `065031412132`, `221315724874`, `550222016520`, `679437835821`, or `765186506449`; it requires centralized CloudWatch log groups. The lookup value is a string. `limit` defaults to `1000`, is capped by `MAX_LOG_SEARCH_LINES`, and must be positive. The maximum time span is `MAX_TIME_RANGE_DAYS`.
 
-The backend searches centralized CloudWatch groups if explicitly configured or if linked-account discovery is enabled; otherwise it calls regional CloudTrail `LookupEvents`. The latter API reads pages of at most 50 events, so a response can contain fewer than the requested limit. Response shape matches CloudWatch search: `events`, `cursor`, `truncated`, and `total_returned`.
+The backend searches centralized CloudWatch groups if explicitly configured or if linked-account discovery is enabled; otherwise it calls regional CloudTrail `LookupEvents`. Centralized results are oldest-first across pages; regional event history is newest-first across pages, matching `LookupEvents`. The latter API reads pages of at most 50 events, so a response can contain fewer than the requested limit. Response shape matches CloudWatch search: `events`, `cursor`, `truncated`, and `total_returned`.
 
 ## AI analysis
 

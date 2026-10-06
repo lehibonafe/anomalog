@@ -52,6 +52,7 @@ interface SelectionState {
   cloudTrailNextRequest: CloudTrailSearchRequest | null;
   searchGeneration: number;
   activeSearchSource: SourceMode | null;
+  searchInFlightCount: number;
   llmProvider: LlmProvider;
   providerSettings: Record<LlmProvider, ProviderSettings>;
   llmApiKey: string;
@@ -71,6 +72,8 @@ interface SelectionState {
   beginSearch: (source: SourceMode) => number;
   isCurrentSearch: (generation: number, source: SourceMode) => boolean;
   invalidateSearch: () => void;
+  startSearchRequest: () => void;
+  finishSearchRequest: () => void;
   setHighlightedRange: (range: HighlightedRange | null) => void;
   setCloudWatchNextRequest: (request: CloudWatchSearchRequest | null) => void;
   setCloudTrailNextRequest: (request: CloudTrailSearchRequest | null) => void;
@@ -98,6 +101,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   cloudTrailNextRequest: null,
   searchGeneration: 0,
   activeSearchSource: null,
+  searchInFlightCount: 0,
   llmProvider: "litellm",
   providerSettings: emptyProviderSettings(),
   llmApiKey: "",
@@ -160,6 +164,8 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
     cloudWatchNextRequest: null,
     cloudTrailNextRequest: null,
   })),
+  startSearchRequest: () => set((state) => ({ searchInFlightCount: state.searchInFlightCount + 1 })),
+  finishSearchRequest: () => set((state) => ({ searchInFlightCount: Math.max(0, state.searchInFlightCount - 1) })),
   setHighlightedRange: (range) => set({ highlightedRange: range }),
   setCloudWatchNextRequest: (request) => set({ cloudWatchNextRequest: request }),
   setCloudTrailNextRequest: (request) => set({ cloudTrailNextRequest: request }),

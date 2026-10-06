@@ -1,3 +1,6 @@
+import base64
+import json
+import zlib
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
@@ -249,3 +252,98 @@ def test_empty_page_preserves_continuation(mock_get_client):
     second = cloudwatch_service.search_log_events(**args, cursor=first.cursor)
     assert [event.message for event in second.events] == ["later event"]
     assert second.cursor is None
+
+
+@patch("app.services.cloudwatch_service.get_logs_client")
+def test_interleaved_groups_stay_ordered_across_pages(mock_get_client):
+    data = {
+        "a": [(1000, "a-first"), (3000, "a-last")],
+        "b": [(2000, "b-middle")],
+    }
+
+    def fetch(logGroupName, limit, nextToken="0", **kwargs):
+        start = int(nextToken)
+        page = data[logGroupName][start:start + limit]
+        response = {
+            "events": [{"timestamp": stamp, "message": message} for stamp, message in page]
+        }
+        if start + len(page) < len(data[logGroupName]):
+            response["nextToken"] = str(start + len(page))
+        return response
+
+    mock_get_client.return_value.filter_log_events.side_effect = fetch
+    args = dict(
+        log_group_names=["a", "b"],
+        start_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        end_time=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        filter_pattern=None,
+        limit=2,
+        settings=make_settings(),
+    )
+    first = cloudwatch_service.search_log_events(**args, cursor=None)
+    second = cloudwatch_service.search_log_events(**args, cursor=first.cursor)
+
+    assert [event.message for event in first.events + second.events] == [
+        "a-first", "b-middle", "a-last"
+    ]
+    assert second.cursor is None
+
+
+@patch("app.services.cloudwatch_service.get_logs_client")
+def test_invalid_cursor_returns_client_error(mock_get_client):
+    with pytest.raises(BadRequestError, match="Invalid or expired search cursor"):
+        cloudwatch_service.search_log_events(
+            ["a"], datetime(2026, 1, 1, tzinfo=timezone.utc),
+            datetime(2026, 1, 2, tzinfo=timezone.utc), None, 2,
+            "not-a-valid-cursor", make_settings(),
+        )
+    mock_get_client.return_value.filter_log_events.assert_not_called()
+
+
+@patch("app.services.cloudwatch_service.get_logs_client")
+def test_cursor_cannot_be_reused_with_another_filter(mock_get_client):
+    mock_get_client.return_value.filter_log_events.return_value = {
+        "events": [{"timestamp": 1000, "message": "one"}],
+        "nextToken": "next",
+    }
+    args = dict(
+        log_group_names=["a"], start_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        end_time=datetime(2026, 1, 2, tzinfo=timezone.utc), limit=1,
+        settings=make_settings(),
+    )
+    first = cloudwatch_service.search_log_events(**args, filter_pattern=None, cursor=None)
+    with pytest.raises(BadRequestError, match="Invalid or expired search cursor"):
+        cloudwatch_service.search_log_events(**args, filter_pattern="ERROR", cursor=first.cursor)
+
+
+@patch("app.services.cloudwatch_service.get_logs_client")
+def test_buffered_cursor_events_are_masked_again_before_delivery(mock_get_client):
+    data = {
+        "a": [(1000, "first"), (3000, "jane.doe@example.com")],
+        "b": [(2000, "middle")],
+    }
+
+    def fetch(logGroupName, limit, nextToken="0", **kwargs):
+        start = int(nextToken)
+        page = data[logGroupName][start:start + limit]
+        return {"events": [
+            {"timestamp": stamp, "message": message} for stamp, message in page
+        ]}
+
+    mock_get_client.return_value.filter_log_events.side_effect = fetch
+    args = dict(
+        log_group_names=["a", "b"],
+        start_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        end_time=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        filter_pattern=None, limit=2, settings=make_settings(),
+    )
+    first = cloudwatch_service.search_log_events(**args, cursor=None)
+    payload = json.loads(zlib.decompress(base64.urlsafe_b64decode(first.cursor)))
+    assert "jane.doe@example.com" not in json.dumps(payload)
+
+    # Even a client-edited cursor cannot bypass the masking step.
+    payload["groups"][0]["pending"][0]["message"] = "jane.doe@example.com"
+    altered = base64.urlsafe_b64encode(zlib.compress(json.dumps(payload).encode())).decode()
+    second = cloudwatch_service.search_log_events(**args, cursor=altered)
+    assert "jane.doe@example.com" not in second.events[0].message
+    assert "***MASKED***" in second.events[0].message

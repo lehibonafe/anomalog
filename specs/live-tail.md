@@ -8,6 +8,7 @@
 - If the browser cannot consume messages fast enough, the backend stops the stream instead of allowing an unbounded queue.
 - Pausing retains up to 5,000 events in the browser while the AWS session stays active. The UI reports dropped buffered events and estimates cost from started minutes.
 - Active Live Tail retains a bounded browser history, gives every event a unique increasing line index, and reports events evicted from that history.
+- Starting Live Tail waits until pending log searches finish; switching sources closes its stream without appending paused events to the new source.
 
 ## Acceptance checks
 

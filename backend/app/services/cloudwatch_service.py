@@ -1,3 +1,5 @@
+import hashlib
+import json
 from datetime import datetime, timedelta, timezone
 
 from app.config import Settings
@@ -133,8 +135,12 @@ def search_log_events(
         groups=log_group_names,
         limit=effective_limit,
         cursor=cursor,
+        query_key=hashlib.sha256(json.dumps([
+            list(dict.fromkeys(log_group_names)), start_ms, end_ms, filter_pattern,
+        ], separators=(",", ":")).encode()).hexdigest(),
         fetch_page=fetch_page,
         convert_page=convert_page,
+        remask_pending=lambda messages: mask_messages_batch(messages, settings),
     )
 
     return CloudWatchSearchResponse(

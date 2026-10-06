@@ -31,7 +31,7 @@ export function CloudTrailSourcePicker() {
   const setAttributeKey = useSelectionStore((s) => s.setCloudTrailAttributeKey);
   const attributeValue = useSelectionStore((s) => s.cloudTrailAttributeValue);
   const setAttributeValue = useSelectionStore((s) => s.setCloudTrailAttributeValue);
-  const { data: config } = useAppConfig();
+  const { data: config, isError: configError } = useAppConfig();
   const accountFilterAvailable = config?.cloudtrail_account_filter_available === true;
 
   useEffect(() => {
@@ -41,15 +41,19 @@ export function CloudTrailSourcePicker() {
   return (
     <div className="panel-section">
       <div className="panel-section-title">CloudTrail events</div>
-      <p className="hint">{accountFilterAvailable
-        ? "Search organization events by account and optional attribute."
-        : "Search regional events by optional attribute. Account filtering requires centralized CloudTrail groups."}</p>
+      <p className="hint">{!config
+        ? configError
+          ? "Could not check account filtering. Search all accounts or retry later."
+          : "Checking whether account filtering is available."
+        : accountFilterAvailable
+          ? "Search organization events by account and optional attribute."
+          : "Search regional events by optional attribute. Account filtering requires centralized CloudTrail groups."}</p>
       <div className="custom-range-row">
         <label>
           Account
           <select
             value={accountId}
-            disabled={!accountFilterAvailable}
+            disabled={!!config && !accountFilterAvailable}
             onChange={(e) => setAccountId(e.target.value as CloudTrailAccountId | "")}
           >
             <option value="">All accounts</option>

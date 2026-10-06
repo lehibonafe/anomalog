@@ -1,3 +1,4 @@
+import { isAxiosError } from "axios";
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { List, useDynamicRowHeight, useListRef, type RowComponentProps } from "react-window";
 
@@ -361,7 +362,11 @@ export function LogViewer({
     <div className="log-pagination-footer">
       <span>
         {events.length.toLocaleString()} {sourceMode === "cloudwatch" ? "logs" : "events"} loaded
-        {pagination.isError && <small role="alert">Could not load more. Try again.</small>}
+        {pagination.isError && <small role="alert">{
+          isAxiosError(pagination.error) && pagination.error.response?.status === 400
+            ? "Search cursor expired or invalid. Run the search again."
+            : "Could not load more. Try again."
+        }</small>}
       </span>
       <button
         type="button"

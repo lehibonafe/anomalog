@@ -24,10 +24,12 @@ function formatElapsed(seconds: number) {
 export function LiveTailControls({ onRunningChange }: LiveTailControlsProps) {
   const logGroupNames = useSelectionStore((state) => state.logGroupNames)
   const filterPattern = useSelectionStore((state) => state.filterPattern)
+  const sourceDescription = useSelectionStore((state) => state.sourceDescription)
   const setEvents = useSelectionStore((state) => state.setEvents)
   const appendLiveEvents = useSelectionStore((state) => state.appendLiveEvents)
   const invalidateSearch = useSelectionStore((state) => state.invalidateSearch)
   const droppedLiveEvents = useSelectionStore((state) => state.liveTailDroppedEvents)
+  const searchInFlightCount = useSelectionStore((state) => state.searchInFlightCount)
   const socketRef = useRef<WebSocket | null>(null)
   const confirmationRef = useRef<HTMLDialogElement | null>(null)
   const startedAtRef = useRef<number | null>(null)
@@ -47,6 +49,7 @@ export function LiveTailControls({ onRunningChange }: LiveTailControlsProps) {
   const [droppedPausedEventCount, setDroppedPausedEventCount] = useState(0)
 
   const running = status !== 'idle'
+  const showingLiveHistory = sourceDescription.startsWith('CloudWatch Live Tail:')
   const selectionIsValid = logGroupNames.length > 0 && logGroupNames.length <= 10
   const billedMinutes = elapsedSeconds === 0 ? 0 : Math.ceil(elapsedSeconds / 60)
   const estimatedCost = billedMinutes * costPerMinute
@@ -101,7 +104,16 @@ export function LiveTailControls({ onRunningChange }: LiveTailControlsProps) {
     window.addEventListener('beforeunload', closeSocket)
     return () => {
       window.removeEventListener('beforeunload', closeSocket)
-      closeSocket()
+      const socket = socketRef.current
+      if (socket) {
+        socket.onopen = null
+        socket.onmessage = null
+        socket.onerror = null
+        socket.onclose = null
+        socket.close()
+        socketRef.current = null
+      }
+      pausedEventsRef.current = []
     }
   }, [])
 
@@ -119,7 +131,7 @@ export function LiveTailControls({ onRunningChange }: LiveTailControlsProps) {
   }
 
   function startLiveTail() {
-    if (!selectionIsValid || running) return
+    if (!selectionIsValid || running || useSelectionStore.getState().searchInFlightCount > 0) return
     closeConfirmation()
     setStatus('connecting')
     setError(null)
@@ -145,6 +157,10 @@ export function LiveTailControls({ onRunningChange }: LiveTailControlsProps) {
     }))
 
     socket.onmessage = (event) => {
+      if (useSelectionStore.getState().sourceMode !== 'cloudwatch') {
+        socket.close()
+        return
+      }
       const message = JSON.parse(event.data) as LiveTailServerMessage
       if (message.type === 'session_started') {
         setInactivitySeconds(message.inactivity_timeout_seconds)
@@ -183,7 +199,7 @@ export function LiveTailControls({ onRunningChange }: LiveTailControlsProps) {
 
     socket.onclose = () => {
       if (socketRef.current === socket) socketRef.current = null
-      flushPausedEvents()
+      if (useSelectionStore.getState().sourceMode === 'cloudwatch') flushPausedEvents()
       pausedRef.current = false
       setStatus('idle')
     }
@@ -244,12 +260,6 @@ export function LiveTailControls({ onRunningChange }: LiveTailControlsProps) {
           {status === 'paused' && (
             <p className='warning-text'>Display paused with {bufferedEventCount.toLocaleString()} event{bufferedEventCount === 1 ? '' : 's'} buffered. The AWS session remains active and billable.</p>
           )}
-          {droppedPausedEventCount > 0 && (
-            <p className='warning-text'>{droppedPausedEventCount.toLocaleString()} older paused event{droppedPausedEventCount === 1 ? '' : 's'} discarded after the {PAUSED_EVENT_BUFFER_LIMIT.toLocaleString()}-event buffer filled.</p>
-          )}
-          {droppedLiveEvents > 0 && (
-            <p className='warning-text'>{droppedLiveEvents.toLocaleString()} older event{droppedLiveEvents === 1 ? '' : 's'} removed from the displayed Live Tail history.</p>
-          )}
           {isSampled && <p className='warning-text'>AWS is sampling this high-volume stream.</p>}
           <div className='live-tail-session-actions'>
             <button
@@ -265,13 +275,19 @@ export function LiveTailControls({ onRunningChange }: LiveTailControlsProps) {
         </div>
       ) : (
         <>
-          <button type='button' className='btn-block' disabled={!selectionIsValid} onClick={() => setShowConfirmation(true)}>Start Live Tail</button>
+          <button type='button' className='btn-block' disabled={!selectionIsValid || searchInFlightCount > 0} onClick={() => setShowConfirmation(true)}>Start Live Tail</button>
           <p className='hint'>Starts only after confirmation. Maximum {freeTierMinutes.toLocaleString()} free AWS minutes per month, then ${costPerMinute.toFixed(2)}/minute.</p>
           {logGroupNames.length > 10 && <p className='error-text'>Live Tail supports up to 10 selected log groups.</p>}
         </>
       )}
+      {showingLiveHistory && droppedPausedEventCount > 0 && (
+        <p className='warning-text'>{droppedPausedEventCount.toLocaleString()} older paused event{droppedPausedEventCount === 1 ? '' : 's'} discarded after the {PAUSED_EVENT_BUFFER_LIMIT.toLocaleString()}-event buffer filled.</p>
+      )}
+      {showingLiveHistory && droppedLiveEvents > 0 && (
+        <p className='warning-text'>{droppedLiveEvents.toLocaleString()} older event{droppedLiveEvents === 1 ? '' : 's'} removed from the displayed Live Tail history.</p>
+      )}
       {error && <p className='error-text' role='alert'>{error}</p>}
-      {stopReason && !running && <p className='hint' role='status'>{stopReason}</p>}
+      {stopReason && !running && showingLiveHistory && <p className='hint' role='status'>{stopReason}</p>}
 
       <dialog
         ref={confirmationRef}
@@ -290,7 +306,7 @@ export function LiveTailControls({ onRunningChange }: LiveTailControlsProps) {
         </ul>
         <div className='live-tail-confirmation-actions'>
           <button type='button' onClick={closeConfirmation}>Cancel</button>
-          <button type='button' className='btn-primary' onClick={startLiveTail}>Start Live Tail</button>
+          <button type='button' className='btn-primary' disabled={searchInFlightCount > 0} onClick={startLiveTail}>Start Live Tail</button>
         </div>
       </dialog>
     </div>

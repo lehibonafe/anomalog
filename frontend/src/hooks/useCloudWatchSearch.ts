@@ -12,6 +12,7 @@ export function useCloudWatchSearch() {
   return useMutation({
     mutationFn: (request: CloudWatchSearchRequest) => searchCloudWatchLogs(request),
     onMutate: (variables) => {
+      useSelectionStore.getState().startSearchRequest();
       return variables.cursor
         ? useSelectionStore.getState().searchGeneration
         : useSelectionStore.getState().beginSearch("cloudwatch");
@@ -30,5 +31,6 @@ export function useCloudWatchSearch() {
 
       setCloudWatchNextRequest(data.cursor ? { ...variables, cursor: data.cursor } : null);
     },
+    onSettled: () => useSelectionStore.getState().finishSearchRequest(),
   });
 }
