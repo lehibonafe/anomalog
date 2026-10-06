@@ -8,7 +8,7 @@
 - Set `AWS_REGION` to the region to search. Leave `AWS_PROFILE` empty when using exported credentials or an instance/task role. Set `AWS_ROLE_ARN` only when the backend should assume a monitoring role; set `AWS_ROLE_EXTERNAL_ID` when that role's trust policy requires it.
 - `AWS_INCLUDE_LINKED_ACCOUNTS=true` enables linked log-group discovery. `CLOUDTRAIL_LOG_GROUP_IDENTIFIERS` supplies explicit centralized CloudTrail groups; without either setting, CloudTrail uses regional `LookupEvents`.
 - Set `MASKING_SERVICE_API_KEY` to enable the external masking service. If it is absent or that service fails, local regex masking still runs. Use a trusted certificate and enable `MASKING_SERVICE_VERIFY_SSL` when the masking endpoint supports it.
-- Keep search, analysis, Live Tail, and inbound rate limits within the validated ranges in `backend/app/config.py`. Treat Live Tail price and free-tier values as UI estimates; actual AWS billing is determined by the AWS account.
+- Respect the declared bounds for Live Tail timeout/session count and analysis token/output settings in `backend/app/config.py`; other numeric settings have defaults but no Pydantic range constraint. Treat Live Tail price and free-tier values as UI estimates; actual AWS billing is determined by the AWS account.
 - The service has no built-in user authentication. A public deployment must restrict access through its network or an authenticated proxy; CORS and rate limiting do not grant access control.
 
 ## Acceptance checks
