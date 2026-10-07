@@ -222,7 +222,7 @@ export function ModelSettingsPanel() {
         </label>
       )}
 
-      <p className="hint">Connection tests and analysis send requests to {modelDestination(llmProvider, llmBaseUrl)}.</p>
+      <p className="hint">Connection tests and analysis send requests to {modelDestination(llmProvider, llmBaseUrl)}. Custom URLs require server approval.</p>
 
       <button
         type="button"

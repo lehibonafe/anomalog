@@ -2,11 +2,15 @@ from functools import lru_cache
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import Field, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    # Machine-to-machine caller authentication. Production requires a key.
+    anomalog_api_key: SecretStr | None = None
+    require_api_key: bool = False
+
     # AWS
     aws_profile: str | None = None
     aws_region: str = "ap-southeast-1"
@@ -70,6 +74,20 @@ class Settings(BaseSettings):
 
     # Inbound API abuse guard (per-client-IP, per-process — see InboundRateLimiter)
     inbound_rate_limit_per_minute: int = 120
+
+    @field_validator("anomalog_api_key", mode="before")
+    @classmethod
+    def empty_api_key_is_unset(cls, value: object) -> object:
+        return None if value == "" else value
+
+    @model_validator(mode="after")
+    def validate_api_key(self) -> "Settings":
+        key = self.anomalog_api_key.get_secret_value() if self.anomalog_api_key else ""
+        if key and len(key) < 32:
+            raise ValueError("ANOMALOG_API_KEY must contain at least 32 characters")
+        if self.require_api_key and not key:
+            raise ValueError("ANOMALOG_API_KEY is required when REQUIRE_API_KEY=true")
+        return self
 
     @field_validator("litellm_base_url")
     @classmethod

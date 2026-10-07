@@ -34,7 +34,7 @@ The conclusions below are uncertain from this checkout. They are **not** current
 
 **Evidence:** `README.md`, `docker-compose.prod.yml`, `deploy.sh`; actual host processes, Docker network membership, and any separate ingress remain unverified.
 
-**Impact if incorrect:** Untrusted local processes, connected containers, or an external ingress could reach the unauthenticated API and billable streaming/model operations.
+**Impact if incorrect:** Untrusted local processes, connected containers, or an external ingress could attempt access to the protected API. A stolen or shared machine key would permit billable streaming/model operations within the backend's AWS permissions.
 
 **Needs confirmation:** Yes.
 

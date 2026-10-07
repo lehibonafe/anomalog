@@ -197,9 +197,9 @@ Missing key, unreachable endpoint, or quota returns `success:false` in many case
 ### Edge cases
 Switching providers must not reuse another provider's key/base URL.
 ### Security considerations
-The browser sends optional key/base URL to backend; arbitrary base URL is an observed network risk.
+The browser sends optional provider key/base URL to the backend; the backend permits only server-approved destinations for that provider.
 ### Acceptance criteria
-Provider switching preserves isolation and connection test does not expose server keys.
+Provider switching preserves isolation, connection test does not expose server keys, and an unapproved URL is rejected before any provider call.
 ### Related requirements
 REQ-FUNC-012, REQ-SEC-003.
 ### Related components

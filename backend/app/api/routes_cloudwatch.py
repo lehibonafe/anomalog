@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, ValidationError
 from starlette.websockets import WebSocketState
 
 from app.config import Settings, get_settings
+from app.core.api_auth import valid_api_key
 from app.schemas.cloudwatch import (
     CloudWatchSearchRequest,
     CloudWatchSearchResponse,
@@ -66,6 +67,9 @@ async def live_tail_logs(
     settings: Settings = Depends(get_settings),
 ):
     """Proxy one explicitly started, masked CloudWatch Live Tail session."""
+    if not valid_api_key(websocket.headers.get("x-api-key"), settings):
+        await websocket.close(code=1008, reason="Invalid API key")
+        return
     origin = websocket.headers.get("origin")
     if origin and "*" not in settings.cors_origins and origin not in settings.cors_origins:
         await websocket.close(code=1008, reason="Origin is not allowed")

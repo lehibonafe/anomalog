@@ -21,7 +21,8 @@ flowchart LR
 
 | Boundary | Data crossing it | Owner and controls |
 | --- | --- | --- |
-| Browser → backend | Search criteria, provider overrides, visible events, optional API key, WebSocket controls | FastAPI/Pydantic and service validation; HTTP rate limit; WebSocket Origin check. No built-in user auth. |
+| Browser → backend | Search criteria, provider overrides, visible events, optional provider key, WebSocket controls | FastAPI/Pydantic and service validation; HTTP rate limit; WebSocket Origin check. Browser UI works in development only while production API key enforcement is enabled. |
+| Calling app → backend | HTTP requests, optional Live Tail WebSocket controls, `X-API-Key` | Shared machine key required in production before AWS/model work. |
 | Backend → AWS | Log-group discovery, filtered event search, CloudTrail lookup, Live Tail | boto3 credential chain and optional assumed role; IAM is external. |
 | Backend → masker | Raw log sub-batches when configured | `masking.py` with HTTP timeout and local fallback; TLS verification setting defaults false. |
 | Backend → model | Re-masked, selected/chunked evidence plus prompt/history | Provider adapters and app-level pacing/retries. |
@@ -56,4 +57,4 @@ CloudWatch and centralized CloudTrail use merged oldest-first pagination; region
 
 ## Deployment trust boundary
 
-The development Compose file publishes both service ports. The production Compose file builds a static frontend, proxies `/api` through Nginx, publishes only a host loopback port, and keeps the backend inside the Compose network. `deploy.sh` builds and verifies that local stack. Same-host processes can use the loopback API; containers on the project network can call the backend service. There is no caller authentication or remote ingress in this checkout; see [deployment.md](deployment.md) and [ASM-003](assumptions.md#asm-003). Treat host processes and containers attached to the network as trusted.
+The development Compose file publishes both service ports. The production Compose file builds a static frontend, proxies `/api` through Nginx, publishes only a host loopback port, and keeps the backend inside the Compose network. `deploy.sh` builds and verifies that local stack. Same-host processes can use the loopback API; containers on the project network can call the backend service. Production requires a shared caller key. There is no remote ingress in this checkout; see [deployment.md](deployment.md) and [ASM-003](assumptions.md#asm-003).

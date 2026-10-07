@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 import pytest
+from pydantic import ValidationError
 
 from app.config import Settings
 from app.core.errors import BadRequestError, LLMQuotaExceededError, LLMRequestError
@@ -25,6 +26,23 @@ def make_event(i: int, message: str) -> LogEvent:
 
 def make_settings(**overrides) -> Settings:
     return Settings(gemini_api_key="test-key", litellm_api_key="test-litellm-key", gemini_rpm_limit=6000, **overrides)
+
+
+def test_model_allowlist_loads_from_environment(monkeypatch):
+    monkeypatch.setenv(
+        "MODEL_BASE_URL_ALLOWLIST", '{"ollama":["http://ollama:11434/v1"]}'
+    )
+    settings = Settings(litellm_api_key="test", _env_file=None)
+    assert settings.model_base_url_allowlist == {
+        "ollama": ["http://ollama:11434/v1"]
+    }
+
+
+def test_model_allowlist_rejects_url_with_embedded_credentials():
+    with pytest.raises(ValidationError, match="without credentials"):
+        make_settings(
+            model_base_url_allowlist={"litellm": ["https://key@proxy.example/v1"]}
+        )
 
 
 async def test_analyze_returns_findings_from_single_chunk(monkeypatch):

@@ -6,7 +6,7 @@ This reference describes **Anomalog's own FastAPI service**. The existing [api-r
 
 - Local HTTP base: `http://localhost:8000`; all application routes start with `/api`.
 - JSON request and response bodies use `snake_case`. Timestamps are ISO 8601 date-times with a timezone, for example `2026-10-06T10:00:00Z`.
-- The service has no application authentication. Restrict access at the network or reverse-proxy layer. The HTTP rate limit is per client IP and backend process (default 120 requests/minute). A rate-limited request returns HTTP `429` with `{"detail":"Too many requests. Slow down and try again shortly."}`.
+- In production, send `X-API-Key: <ANOMALOG_API_KEY>` on HTTP requests and the Live Tail WebSocket handshake. Missing or wrong keys return HTTP `401` (or reject the WebSocket handshake). `GET /api/health` and HTTP `OPTIONS` do not require a key. Development permits unauthenticated calls when `ANOMALOG_API_KEY` is unset. The HTTP rate limit is per client IP and backend process (default 120 requests/minute). A rate-limited request returns HTTP `429` with `{"detail":"Too many requests. Slow down and try again shortly."}`.
 - Pydantic validation failures use FastAPI's HTTP `422` detail format. Application errors use `{"detail":"message"}` (usually `400`, `404`, `429`, or `502`). AWS and other unhandled failures may return `500`.
 - Search cursors and AWS next tokens are opaque. Send the returned value unchanged with the same search inputs; `null` means there is no next page.
 - Search and Live Tail event messages are masked before delivery. The analysis route re-masks submitted messages before an LLM call. `/api/mask/test` uses only the local regex masker.
@@ -132,7 +132,7 @@ Request:
 }
 ```
 
-`events` and `context.source_description` are required. `provider` defaults to `litellm` and also accepts `gemini`, `openai`, `anthropic`, and `ollama`. Optional `api_key`, `model`, `base_url`, and `user_prompt` may be omitted or `null`. `history` defaults to `[]` and contains `{ "role": "user" | "assistant", "content": "..." }`. The backend rejects more than `MAX_LOG_SEARCH_LINES` input events or `MAX_CHAT_HISTORY_MESSAGES` history messages. Provider calls are subject to server limits and rate pacing.
+`events` and `context.source_description` are required. `provider` defaults to `litellm` and also accepts `gemini`, `openai`, `anthropic`, and `ollama`. Optional `api_key`, `model`, `base_url`, and `user_prompt` may be omitted or `null`. A supplied `base_url` must exactly match the provider default or an additional URL approved for that provider in `MODEL_BASE_URL_ALLOWLIST`; Gemini does not accept one. Unapproved URLs return HTTP 400 before any provider call. `history` defaults to `[]` and contains `{ "role": "user" | "assistant", "content": "..." }`. The backend rejects more than `MAX_LOG_SEARCH_LINES` input events or `MAX_CHAT_HISTORY_MESSAGES` history messages. Provider calls are subject to server limits and rate pacing.
 
 Response fields:
 
@@ -150,7 +150,7 @@ Response fields:
 
 ### `POST /api/analysis/test-connection`
 
-Request: `{"provider":"litellm","api_key":null,"model":null,"base_url":null}`. The same provider names and optional settings apply as above. Response: `{"success":true,"message":"Connected successfully.","model":"effective-model"}`. A provider connection or configuration failure is normally returned as HTTP `200` with `success:false` and a diagnostic `message`.
+Request: `{"provider":"litellm","api_key":null,"model":null,"base_url":null}`. The same provider names and optional settings apply as above. Response: `{"success":true,"message":"Connected successfully.","model":"effective-model"}`. A provider connection or configuration failure, including an unapproved base URL, is normally returned as HTTP `200` with `success:false` and a diagnostic `message`.
 
 ## CloudWatch Live Tail WebSocket
 

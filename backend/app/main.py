@@ -9,6 +9,7 @@ from app.api import (
     routes_meta,
 )
 from app.config import get_settings
+from app.core.api_auth import valid_api_key
 from app.core.errors import register_exception_handlers
 from app.core.rate_limiter import InboundRateLimiter
 
@@ -27,7 +28,18 @@ app.add_middleware(
 
 
 @app.middleware("http")
-async def enforce_inbound_rate_limit(request: Request, call_next):
+async def enforce_api_key_and_rate_limit(request: Request, call_next):
+    is_health_check = request.method == "GET" and request.url.path == "/api/health"
+    if (
+        not is_health_check
+        and request.method != "OPTIONS"
+        and not valid_api_key(request.headers.get("x-api-key"), settings)
+    ):
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Invalid API key."},
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
     client_key = request.client.host if request.client else "unknown"
     if not await inbound_rate_limiter.allow(client_key):
         return JSONResponse(

@@ -8,8 +8,8 @@ One React/Vite page calls a FastAPI service for CloudWatch and CloudTrail search
 
 ## Recommended Improvements
 
-1. **Secure deployment access:** confirm the production perimeter; add an authenticated proxy or in-app identity model before broader exposure. Limit backend port reachability. See [security.md](security.md) and ASM-003.
-2. **Review outbound trust:** require verified TLS for external masking once certificates permit; use HTTPS or a verified private channel for the default LiteLLM proxy; constrain or approve user-supplied provider base URLs; audit any exception text returned to clients.
+1. **Secure deployment access:** confirm the production perimeter and key handling; add a browser sign-in flow if the React UI must work with the protected production API. Keep backend port reachability limited and require TLS before remote access. See [security.md](security.md) and ASM-003.
+2. **Review outbound trust:** require verified TLS for external masking once certificates permit; use HTTPS or a verified private channel for the default LiteLLM proxy; review approved provider base URLs and audit any exception text returned to clients.
 3. **Harden cursor integrity and input bounds:** authenticate or server-store continuation state, and set explicit size/range limits for request arrays/text. Add negative tests for cursor tampering and oversized bodies.
 4. **Complete release operations:** add CI/CD and a tested rollback procedure; if remote access becomes necessary, define and validate HTTPS ingress and caller authorization. Review stale module names in `CLAUDE.md` and check the DOCX guides against the actual deployment.
 5. **Expand meaningful UI/API tests:** browser flows for cost confirmation, source switch, citation, export, history deletion, and model settings; route error-envelope and security regression tests. Keep automated AWS/model calls mocked.

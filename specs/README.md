@@ -42,7 +42,7 @@ Feature detail: [log-search.md](log-search.md), [live-tail.md](live-tail.md), [l
 | API | Complete | High | All eight HTTP routes and one WebSocket route mapped to source. |
 | Data Model | Complete | High | No application database found; API and browser state are documented. |
 | Security | Complete | Medium | Code shows controls and risks; deployment perimeter is outside repo. |
-| Infrastructure | Complete | Medium | Compose is present; production proxy and EC2 setup are not checked in. |
+| Infrastructure | Complete | Medium | Compose and a local Nginx proxy are present; actual EC2 setup is not checked in. |
 | Testing | Complete | High | Test inventory is visible; no live integration or browser E2E evidence. |
 | Deployment | Complete | Medium | Local-only production script exists; container build and real host access remain unverified. |
 | Observability | Complete | Medium | Health and log calls visible; external monitoring is unknown. |

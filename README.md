@@ -282,20 +282,57 @@ and all event messages pass through the configured PII masker before delivery.
 
 ## Deploying locally on an EC2 host
 
-Prepare `backend/.env` with the model and AWS settings from
-[`backend/.env.example`](backend/.env.example), then run this on the host:
+This section is for `./deploy.sh`, which uses the production configuration even
+though its API listens only on the local host. `./dev.sh` does not require an
+Anomalog API key when `ANOMALOG_API_KEY` is unset.
 
-```bash
-./deploy.sh
-```
+Push the code and [`backend/.env.example`](backend/.env.example) to the
+repository. Do **not** push `backend/.env`: Git ignores it, and it must contain
+the secrets for each deployment host. After cloning or pulling the repository
+on the production EC2 host:
+
+1. On a new host, create the private configuration file:
+
+   ```bash
+   cp backend/.env.example backend/.env
+   chmod 600 backend/.env
+   ```
+
+   Keep an existing `backend/.env` when pulling later updates; a Git pull does
+   not replace this ignored file.
+
+2. Generate the Anomalog machine key on the production host:
+
+   ```bash
+   openssl rand -hex 32
+   ```
+
+   Put the output in the `ANOMALOG_API_KEY=` line of `backend/.env`. You create
+   this key yourself; AWS and the LiteLLM provider do not issue it. Never put
+   the value in `.env.example`, a commit, the frontend build, or a chat message.
+   The key must be at least 32 characters. `deploy.sh` checks that it is set.
+
+3. Give the **same** key to the other app through its server-side secret
+   configuration. That app sends it as the `X-API-Key` header on every Anomalog
+   API request and Live Tail WebSocket handshake. Set `LITELLM_API_KEY` in
+   `backend/.env` separately if you use default model analysis; configure the
+   AWS region and instance/assumed role as described below. The Anomalog key
+   grants API access; the LiteLLM key grants access to the model proxy.
+
+4. Deploy from the checked-out repository on the EC2 host:
+
+   ```bash
+   ./deploy.sh
+   ```
 
 `deploy.sh` builds the production images from the current checkout, recreates
 both containers, and checks the local UI and API health endpoint. It does not
 edit `backend/.env` or pull Git changes. The frontend is a static build served
 by Nginx; the backend runs Uvicorn without reload. The frontend uses same-origin
-`/api` requests, including the Live Tail WebSocket. The backend permits browser
-origins at the local host port. No public URL, DNS record, or HTTPS proxy is
-required for another backend on the same EC2 host or Docker network.
+`/api` requests, including the Live Tail WebSocket, but the included browser UI
+cannot authenticate to the protected production API. Production is configured
+for the other app's backend to call it. No public URL, DNS record, or HTTPS
+proxy is required for another backend on the same EC2 host or Docker network.
 
 Only `127.0.0.1:8080` is published on the host. The backend is reachable only
 inside the Compose network. Use `PROD_HTTP_PORT` to change the loopback port:
@@ -319,11 +356,22 @@ networks:
     name: anomalog-prod_default
 ```
 
-Anomalog does not authenticate API callers. Access is limited to processes on
-the EC2 host and containers attached to this Docker network; treat both as
-trusted. Do not publish port 8000 or forward port 8080 to other hosts without
-adding an access control layer. The local health check does not prove AWS
-permissions; verify an allowed log read separately.
+The calling app must send `X-API-Key` on each HTTP request and Live Tail
+WebSocket handshake. For example, a same-host health check is public, while
+configuration requires the key:
+
+```bash
+curl -H "X-API-Key: $ANOMALOG_API_KEY" http://127.0.0.1:8080/api/config
+```
+
+Load `ANOMALOG_API_KEY` into the calling app from its secret store before using
+that example; do not put it in source code. An unauthenticated request to
+`/api/config` must return 401, and an authenticated request must return 200.
+Only processes on the EC2 host and containers attached to this Docker network
+can reach the default deployment.
+Do not publish port 8000 or forward port 8080 to other hosts without TLS and
+network access controls. The local health check does not prove AWS permissions;
+verify an allowed log read separately.
 
 When the EC2 instance is in account A and the monitoring account is account B,
 set these values in `backend/.env` to assume a read role in B and enable
@@ -396,16 +444,15 @@ search to ETAP DEVOPS, ECPAY, INC, MONITORING, SRE, or SYSOPS. Account filtering
 uses the CloudTrail event's `recipientAccountId` field and therefore requires
 the centralized CloudWatch Logs mode.
 
-The app has **no authentication** — restrict access at the network layer
-(security group scoped to your IP, VPN, or an authenticated reverse proxy).
-There is a lightweight per-IP inbound rate limit (`INBOUND_RATE_LIMIT_PER_MINUTE`,
+Production uses a shared machine API key; it does not identify individual
+users. There is a lightweight per-IP inbound rate limit (`INBOUND_RATE_LIMIT_PER_MINUTE`,
 default 120/min) as an abuse guard, but it's not a substitute for real access
 control, and it's per-worker — see `backend/app/core/rate_limiter.py`. Beyond
 that:
 
-- The production frontend uses same-origin API calls. Production Compose allows
-  local browser origins at `PROD_HTTP_PORT`; the development setup continues to
-  use `frontend/.env` and `backend/.env` for `VITE_API_BASE_URL` and `CORS_ORIGINS`.
+- The included browser UI uses same-origin API calls but has no production
+  sign-in flow. Use the server-to-server API in production. Development still
+  uses `frontend/.env` and `backend/.env` for `VITE_API_BASE_URL` and `CORS_ORIGINS`.
 - On EC2, prefer an instance IAM role over exported keys and leave
   `AWS_PROFILE` unset. For a same-account deployment, attach the read policy
   directly. For the account A/account B deployment, use the restricted
