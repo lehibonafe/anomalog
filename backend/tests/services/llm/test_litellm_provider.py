@@ -5,7 +5,7 @@ import openai
 import pytest
 
 from app.config import Settings
-from app.core.errors import LLMRequestError
+from app.core.errors import BadRequestError, LLMRequestError
 from app.services.llm.base import LLMRateLimited
 from app.services.llm.litellm_provider import LiteLLMProvider
 
@@ -51,11 +51,21 @@ def test_defaults_base_url_from_settings_when_omitted():
     assert str(provider.client.base_url).rstrip("/") == "https://team-proxy.example.com/v1"
 
 
-def test_uses_overridden_base_url():
-    settings = make_settings(litellm_base_url="https://team-proxy.example.com/v1")
+def test_uses_approved_overridden_base_url():
+    settings = make_settings(
+        litellm_base_url="https://team-proxy.example.com/v1",
+        model_base_url_allowlist={"litellm": ["https://override.example.com/v1"]},
+    )
     provider = make_provider(base_url="https://override.example.com/v1", settings=settings)
 
     assert str(provider.client.base_url).rstrip("/") == "https://override.example.com/v1"
+
+
+def test_rejects_unapproved_base_url_before_client_creation():
+    settings = make_settings(litellm_api_key="server-secret")
+
+    with pytest.raises(BadRequestError, match="not approved"):
+        make_provider(base_url="http://127.0.0.1:1234/v1", api_key=None, settings=settings)
 
 
 async def test_call_chunk_returns_text_response():

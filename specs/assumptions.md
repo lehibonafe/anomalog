@@ -28,13 +28,13 @@ The conclusions below are uncertain from this checkout. They are **not** current
 
 ## ASM-003
 
-**Assumption:** Production access is restricted by infrastructure outside this repository.
+**Assumption:** Only trusted processes on the EC2 host and trusted containers attached to the production Compose network can reach the API.
 
-**Reason:** README describes an HTTPS reverse proxy/network restriction, but no proxy, firewall, or named deployment scripts are checked in.
+**Reason:** `deploy.sh` and production Compose bind only a loopback frontend port and do not publish the backend port. Containers attached to the Compose network can still reach the backend directly.
 
-**Evidence:** `README.md`, `docker-compose.yml`, absent `update-ec2.sh` and `deploy.sh` in tracked inventory.
+**Evidence:** `README.md`, `docker-compose.prod.yml`, `deploy.sh`; actual host processes, Docker network membership, and any separate ingress remain unverified.
 
-**Impact if incorrect:** Unauthenticated API and billable streaming/model operations may be publicly reachable.
+**Impact if incorrect:** Untrusted local processes, connected containers, or an external ingress could reach the unauthenticated API and billable streaming/model operations.
 
 **Needs confirmation:** Yes.
 

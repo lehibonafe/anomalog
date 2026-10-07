@@ -21,7 +21,8 @@ IDs are stable. Each row is an intended obligation based on the current feature 
 | REQ-SEC-002 | Security | Re-mask client-submitted events before sending them to an LLM. | Critical | `AnomalyService.analyze`; masking tests. |
 | REQ-SEC-003 | Security | Keep server credentials out of `/api/config` and browser AWS access. | Critical | Meta route returns flags; AWS calls live in backend. |
 | REQ-SEC-004 | Security | Escape spreadsheet formula prefixes in CSV export. | Medium | `LogViewer.tsx` `csvCell`; add focused test when exporter changes. |
-| REQ-SEC-005 | Security/Operational | Restrict deployed API access at a network or authenticated-proxy boundary until app authentication exists. | Critical | No auth middleware in `main.py`; deployment validation must check perimeter. |
+| REQ-SEC-005 | Security/Operational | Restrict deployed API access to trusted local host processes or containers on the intended Docker network until caller authentication exists. | Critical | Production Compose publishes only the frontend on host loopback and no backend port; verify actual network membership and absence of unintended ingress. |
+| REQ-SEC-006 | Security | Reject caller-supplied model base URLs unless the exact URL is approved for that provider in server configuration; never forward the server LiteLLM key to an unapproved URL. | Critical | Analysis and connection-test regression tests cover rejected and approved destinations; deployment configuration documents trusted URLs. |
 | REQ-PERF-001 | Performance | Bound search response size, analysis input, Live Tail buffers, and provider input with configured limits. | High | Settings, service caps, bounded WebSocket queue, browser buffers. |
 | REQ-PERF-002 | Performance | Virtualize visible rows and avoid facet parsing for keyword-only filtering. | Medium | `LogViewer.tsx` and facet cache; frontend tests. |
 | REQ-REL-001 | Reliability | Close Live Tail on stop, disconnect, inactivity, AWS end, or slow consumer. | High | WebSocket route and stream tests. |
@@ -30,6 +31,7 @@ IDs are stable. Each row is an intended obligation based on the current feature 
 | REQ-OPS-001 | Operational | Expose health and safe capability configuration endpoints. | Medium | `routes_meta.py`; health is a shallow process check. |
 | REQ-OPS-002 | Operational | Use environment-backed settings and optional monitoring-account role assumption. | High | `config.py`, `aws_session.py`, Compose, AWS session tests. |
 | REQ-OPS-003 | Operational | Verify changes with mocked backend tests and frontend test/lint/build; sync API docs for contract changes. | High | `AGENTS.md`; [testing.md](testing.md). |
+| REQ-OPS-004 | Operational | Deploy a static frontend and backend without reload, with no publicly published backend port and local health verification. | High | `deploy.sh`, `docker-compose.prod.yml`, production Dockerfiles; verify Compose config, same-host and same-network API access, and local UI/API after build. |
 
 **Compliance:** Not currently applicable as a specified requirement. The repo has privacy controls, but no named regulation, retention policy, or audit obligation. See [ASM-002](assumptions.md#asm-002).
 

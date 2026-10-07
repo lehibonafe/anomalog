@@ -280,43 +280,63 @@ the types `session_started`, `events`, `session_stopped`, `session_ended`, and
 `error`. The backend validates the WebSocket `Origin` against `CORS_ORIGINS`,
 and all event messages pass through the configured PII masker before delivery.
 
-## Deploying on a remote host (e.g. EC2)
+## Deploying locally on an EC2 host
 
-For the production EC2 host behind the HTTPS reverse proxy, update and deploy
-in one command:
-
-```bash
-./update-ec2.sh
-```
-
-The script runs `git pull --ff-only`, sets both the frontend API base and
-backend CORS origin to `https://anomalog.etapinc.com`, rebuilds and recreates
-the containers, and verifies the local and public health endpoints. Existing
-secrets in `backend/.env` are preserved. It also enables linked-account
-CloudWatch log discovery for the centralized monitoring account. Override the
-deployment URL when needed:
+Prepare `backend/.env` with the model and AWS settings from
+[`backend/.env.example`](backend/.env.example), then run this on the host:
 
 ```bash
-PUBLIC_URL=https://other.example.com ./update-ec2.sh
+./deploy.sh
 ```
 
-The HTTPS reverse proxy and certificate are managed outside this Compose file;
-they must route `/api/*` (including WebSockets) to port 8000 and all other
-requests to port 5173.
+`deploy.sh` builds the production images from the current checkout, recreates
+both containers, and checks the local UI and API health endpoint. It does not
+edit `backend/.env` or pull Git changes. The frontend is a static build served
+by Nginx; the backend runs Uvicorn without reload. The frontend uses same-origin
+`/api` requests, including the Live Tail WebSocket. The backend permits browser
+origins at the local host port. No public URL, DNS record, or HTTPS proxy is
+required for another backend on the same EC2 host or Docker network.
+
+Only `127.0.0.1:8080` is published on the host. The backend is reachable only
+inside the Compose network. Use `PROD_HTTP_PORT` to change the loopback port:
+
+```bash
+PROD_HTTP_PORT=8081 ./deploy.sh
+```
+
+An app running directly on the same EC2 host calls
+`http://127.0.0.1:8080/api/...`. A container on the `anomalog-prod_default`
+Docker network calls `http://backend:8000/api/...`. A container in another
+Compose project can join that network by declaring it as external:
+
+```yaml
+services:
+  other-app:
+    networks: [anomalog]
+networks:
+  anomalog:
+    external: true
+    name: anomalog-prod_default
+```
+
+Anomalog does not authenticate API callers. Access is limited to processes on
+the EC2 host and containers attached to this Docker network; treat both as
+trusted. Do not publish port 8000 or forward port 8080 to other hosts without
+adding an access control layer. The local health check does not prove AWS
+permissions; verify an allowed log read separately.
 
 When the EC2 instance is in account A and the monitoring account is account B,
-configure the app to assume a read role in B and enable linked-account discovery:
+set these values in `backend/.env` to assume a read role in B and enable
+linked-account discovery:
 
-```bash
-AWS_ROLE_ARN=arn:aws:iam::MONITORING_ACCOUNT_ID:role/AnomalogMonitoringReadRole \
-AWS_INCLUDE_LINKED_ACCOUNTS=true \
-./update-ec2.sh
+```dotenv
+AWS_ROLE_ARN=arn:aws:iam::MONITORING_ACCOUNT_ID:role/AnomalogMonitoringReadRole
+AWS_INCLUDE_LINKED_ACCOUNTS=true
 ```
 
-`deploy.sh` stores these values in `backend/.env`; later deployments preserve
-them. `AWS_ROLE_EXTERNAL_ID` is also supported when the role trust policy
-requires one. The deployment check prints the effective assumed-role ARN so a
-misconfigured identity is visible immediately.
+Set `AWS_ROLE_EXTERNAL_ID` too when the role trust policy requires it. The
+deployment script preserves these values by leaving `.env` untouched. Verify
+the assumed AWS identity and an allowed log read after deployment.
 
 The account A EC2 instance role needs permission to assume only the monitoring
 role:
@@ -383,9 +403,9 @@ default 120/min) as an abuse guard, but it's not a substitute for real access
 control, and it's per-worker — see `backend/app/core/rate_limiter.py`. Beyond
 that:
 
-- `VITE_API_BASE_URL` (`frontend/.env`) and `CORS_ORIGINS` (`backend/.env`)
-  are **browser-facing** values: set them to the host's public address, not
-  `localhost`, and keep them consistent with the exact origin you browse from.
+- The production frontend uses same-origin API calls. Production Compose allows
+  local browser origins at `PROD_HTTP_PORT`; the development setup continues to
+  use `frontend/.env` and `backend/.env` for `VITE_API_BASE_URL` and `CORS_ORIGINS`.
 - On EC2, prefer an instance IAM role over exported keys and leave
   `AWS_PROFILE` unset. For a same-account deployment, attach the read policy
   directly. For the account A/account B deployment, use the restricted
@@ -436,8 +456,8 @@ that:
 
   See [IAM setup](specs/iam_setup.md) for mode-specific policy guidance and
   [CloudWatch Live Tail](#cloudwatch-live-tail) for runtime and cost settings.
-- `.env` changes require a container recreate (`docker compose up -d`), not
-  `docker compose restart`.
+- After editing `backend/.env`, rerun `./deploy.sh`
+  to recreate the production containers with the new values.
 
 ## Tests
 

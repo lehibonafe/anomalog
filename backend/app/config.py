@@ -1,7 +1,8 @@
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import urlsplit
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,6 +24,10 @@ class Settings(BaseSettings):
     litellm_model: str = "qwen3.8-flash"
     litellm_base_url: str = "http://llm.etapinc.com/v1"
     litellm_enable_thinking: bool = False
+    # Additional destinations explicitly trusted for each provider.
+    model_base_url_allowlist: dict[
+        Literal["litellm", "openai", "anthropic", "ollama"], list[str]
+    ] = Field(default_factory=dict)
 
     # Gemini (opt-in; no longer the server-configured default)
     gemini_api_key: str | None = None
@@ -65,6 +70,38 @@ class Settings(BaseSettings):
 
     # Inbound API abuse guard (per-client-IP, per-process — see InboundRateLimiter)
     inbound_rate_limit_per_minute: int = 120
+
+    @field_validator("litellm_base_url")
+    @classmethod
+    def validate_litellm_base_url(cls, value: str) -> str:
+        return cls._validate_model_url(value)
+
+    @field_validator("model_base_url_allowlist")
+    @classmethod
+    def validate_model_base_url_allowlist(cls, value: dict) -> dict:
+        for urls in value.values():
+            for url in urls:
+                cls._validate_model_url(url)
+        return value
+
+    @staticmethod
+    def _validate_model_url(value: str) -> str:
+        parsed = urlsplit(value)
+        if (
+            value != value.strip()
+            or parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("Model base URLs must be HTTP(S) URLs without credentials, query, or fragment")
+        try:
+            parsed.port
+        except ValueError as exc:
+            raise ValueError("Model base URL has an invalid port") from exc
+        return value
 
     model_config = SettingsConfigDict(env_file=".env", env_prefix="", extra="ignore")
 

@@ -304,7 +304,9 @@ async def test_connection_reports_failure_when_required_api_key_missing():
 
 
 async def test_connection_does_not_raise_for_unreachable_base_url(monkeypatch):
-    settings = make_settings()
+    settings = make_settings(
+        model_base_url_allowlist={"openai": ["http://localhost:1/v1"]}
+    )
     service = AnomalyService(settings)
 
     async def fake_call_chunk(self, system, prompt):
@@ -318,6 +320,43 @@ async def test_connection_does_not_raise_for_unreachable_base_url(monkeypatch):
 
     assert result.success is False
     assert "Connection refused" in result.message
+
+
+async def test_analyze_rejects_unapproved_litellm_destination_before_model_call(monkeypatch):
+    service = AnomalyService(make_settings())
+    called = False
+
+    async def fake_call_chunk(*args, **kwargs):
+        nonlocal called
+        called = True
+        return ChunkResult(analysis="unexpected")
+
+    monkeypatch.setattr(LiteLLMProvider, "call_chunk", fake_call_chunk)
+    with pytest.raises(BadRequestError, match="not approved"):
+        await service.analyze(
+            [make_event(0, "ERROR boom")],
+            AnalysisContext(source_description="test"),
+            base_url="http://127.0.0.1:1234/v1",
+        )
+    assert called is False
+
+
+async def test_connection_rejects_unapproved_destination_before_model_call(monkeypatch):
+    service = AnomalyService(make_settings())
+    called = False
+
+    async def fake_call_chunk(*args, **kwargs):
+        nonlocal called
+        called = True
+        return ChunkResult(analysis="unexpected")
+
+    monkeypatch.setattr(OpenAIProvider, "call_chunk", fake_call_chunk)
+    result = await service.test_connection(
+        provider="openai", api_key="client-key", base_url="http://127.0.0.1:1234/v1"
+    )
+    assert result.success is False
+    assert "not approved" in result.message
+    assert called is False
 
 
 @pytest.mark.parametrize("caps", [

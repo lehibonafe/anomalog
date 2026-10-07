@@ -1,6 +1,7 @@
 from openai import AsyncOpenAI
 
 from app.config import Settings
+from app.core.model_destinations import approved_model_base_url
 from app.services.llm.base import DEFAULT_LLM_TIMEOUT_S, ProviderDefaults
 from app.services.llm.openai_provider import OpenAIProvider
 
@@ -14,7 +15,7 @@ class LiteLLMProvider(OpenAIProvider):
     __init__/resolve_defaults differ. Server-configured like GeminiProvider:
     settings.litellm_api_key/model/base_url are the boot-time defaults (the
     proxy authenticates callers with a virtual key it generates, not the
-    underlying provider's own key), frontend overrides win when supplied.
+    underlying provider's own key). URL overrides require server approval.
     """
 
     name = "litellm"
@@ -38,7 +39,9 @@ class LiteLLMProvider(OpenAIProvider):
     ) -> None:
         self.client = AsyncOpenAI(
             api_key=api_key or settings.litellm_api_key,
-            base_url=base_url or settings.litellm_base_url,
+            base_url=approved_model_base_url(
+                "litellm", base_url, settings.litellm_base_url, settings
+            ),
             timeout=DEFAULT_LLM_TIMEOUT_S,
             max_retries=0,
         )

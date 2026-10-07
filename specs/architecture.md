@@ -56,4 +56,4 @@ CloudWatch and centralized CloudTrail use merged oldest-first pagination; region
 
 ## Deployment trust boundary
 
-The repository defines neither a production ingress nor user identity enforcement. Its Compose file publishes both service ports. The README mentions an HTTPS reverse proxy and EC2 deployment scripts, but those files are absent from this checkout; see [deployment.md](deployment.md) and [ASM-003](assumptions.md#asm-003). Network access control must therefore be verified outside the repository before exposure.
+The development Compose file publishes both service ports. The production Compose file builds a static frontend, proxies `/api` through Nginx, publishes only a host loopback port, and keeps the backend inside the Compose network. `deploy.sh` builds and verifies that local stack. Same-host processes can use the loopback API; containers on the project network can call the backend service. There is no caller authentication or remote ingress in this checkout; see [deployment.md](deployment.md) and [ASM-003](assumptions.md#asm-003). Treat host processes and containers attached to the network as trusted.

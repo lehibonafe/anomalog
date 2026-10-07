@@ -4,6 +4,7 @@ from functools import lru_cache
 
 from app.config import Settings, get_settings
 from app.core.errors import BadRequestError, LLMQuotaExceededError, LLMRequestError
+from app.core.model_destinations import approved_model_base_url
 from app.core.rate_limiter import RateLimiter
 from app.schemas.analysis import (
     AnalysisContext,
@@ -121,7 +122,9 @@ class AnomalyService:
         provider_cls = get_provider_class(provider)
         defaults = self._defaults[provider]
         effective_model = model or defaults.model
-        effective_base_url = base_url or defaults.base_url
+        effective_base_url = approved_model_base_url(
+            provider, base_url, defaults.base_url, self.settings
+        )
         instance = provider_cls(
             api_key=api_key,
             model=effective_model,
@@ -284,9 +287,11 @@ class AnomalyService:
         provider_cls = get_provider_class(provider)
         defaults = self._defaults[provider]
         effective_model = model or defaults.model
-        effective_base_url = base_url or defaults.base_url
 
         try:
+            effective_base_url = approved_model_base_url(
+                provider, base_url, defaults.base_url, self.settings
+            )
             instance = provider_cls(
                 api_key=api_key,
                 model=effective_model,

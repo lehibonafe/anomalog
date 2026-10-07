@@ -11,12 +11,18 @@ Sources: `dev.sh`, both Dockerfiles, `docker-compose.yml`, both `.env.example` f
 
 ## Staging and production
 
-**Not currently applicable as a verified, checked-in pipeline.** No staging environment, CI/CD workflow, production Dockerfile, reverse proxy configuration, certificate automation, or release manifest was found. The README describes an EC2 deployment and `./update-ec2.sh`/`deploy.sh`, but those scripts do not exist in this checkout. Treat those instructions as a documentation gap, not a runnable deployment contract. Any actual production infrastructure needs confirmation ([ASM-003](assumptions.md#asm-003)).
+`deploy.sh` is the checked-in local production entry point. It requires `backend/.env`, Docker Compose v2, and curl; no public URL is required. It builds `backend/Dockerfile.prod` and `frontend/Dockerfile.prod` through `docker-compose.prod.yml`, recreates containers, and checks the locally proxied UI and `/api/health`. The frontend image uses `npm ci` and `npm run build`, then Nginx serves the static bundle and proxies `/api/*` including WebSockets. The backend image runs one Uvicorn process without reload. `deploy.sh` deploys the current checkout and does not pull Git or rewrite `.env`.
 
-The README's stated desired production path requires HTTPS routing of `/api/*` including WebSockets to backend port 8000, frontend traffic to port 5173, browser API URL/CORS origin alignment, and external access control. These are **documented expectations**, not verified deployed resources. The current Compose file publishes ports directly and has no healthcheck stanza.
+The production frontend binds only `127.0.0.1:${PROD_HTTP_PORT:-8080}` on the host; the backend has no published host port. A same-host process calls `http://127.0.0.1:${PROD_HTTP_PORT:-8080}/api`; a container attached to the `anomalog-prod_default` network calls `http://backend:8000/api`. Production Compose allows local browser origins at the selected port, while the UI uses same-origin `/api` calls. Remote hosts cannot use these endpoints without separate ingress; any future remote access needs its own TLS and caller access controls ([ASM-003](assumptions.md#asm-003)). The development Compose file still publishes 8000/5173 and uses reload servers.
 
 ## Environment, migration, and rollback
 
 Required settings and optional provider/AWS/masking limits are in [configuration.md](configuration.md); IAM is in [iam_setup.md](iam_setup.md). Environment changes in Compose require container recreation to take effect. Database migrations are **Not currently applicable** because no database exists.
 
-No checked-in rollback automation or release validation pipeline exists. **Recommendation:** for a future production process, retain the previous image/commit and environment configuration, restore them on failure, recreate containers, verify `/api/health`, browser API reachability, WebSocket upgrade, and a permitted AWS read. This is a proposed procedure, not evidence of an existing one. Do not test billable Live Tail automatically in CI.
+The production backend has a shallow container health check; `deploy.sh` checks only local UI and API response. It does not validate AWS identity, masking service, model endpoint, or Live Tail. No staging environment, CI/CD, or automatic rollback is checked in. Retain the previous image/commit and configuration for manual rollback; after restoring them, rerun `deploy.sh` and verify the local API, WebSocket upgrade where used, and an allowed AWS read. Do not test billable Live Tail automatically in CI.
+
+## Production acceptance checks
+
+- `bash -n deploy.sh` and `docker compose -f docker-compose.prod.yml config --quiet` pass with no public URL. The resulting configuration publishes only a loopback frontend port and no backend port.
+- The built frontend serves `/`, proxies `/api/health`, and upgrades the Live Tail WebSocket for local browser use. A same-host process can call the loopback API; a container on `anomalog-prod_default` can call the backend service name. Neither endpoint is reachable from another host by default.
+- Confirm the backend uses the intended IAM identity and can read one allowed log group while denying one unauthorized group. Health alone does not verify AWS access.

@@ -44,5 +44,5 @@ Feature detail: [log-search.md](log-search.md), [live-tail.md](live-tail.md), [l
 | Security | Complete | Medium | Code shows controls and risks; deployment perimeter is outside repo. |
 | Infrastructure | Complete | Medium | Compose is present; production proxy and EC2 setup are not checked in. |
 | Testing | Complete | High | Test inventory is visible; no live integration or browser E2E evidence. |
-| Deployment | Complete | Low | README names scripts absent from this checkout. |
+| Deployment | Complete | Medium | Local-only production script exists; container build and real host access remain unverified. |
 | Observability | Complete | Medium | Health and log calls visible; external monitoring is unknown. |
