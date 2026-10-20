@@ -6,6 +6,7 @@ from app.api import (
     routes_analysis,
     routes_cloudtrail,
     routes_cloudwatch,
+    routes_investigations,
     routes_meta,
 )
 from app.config import get_settings
@@ -55,3 +56,4 @@ app.include_router(routes_meta.router)
 app.include_router(routes_cloudwatch.router)
 app.include_router(routes_cloudtrail.router)
 app.include_router(routes_analysis.router)
+app.include_router(routes_investigations.router)

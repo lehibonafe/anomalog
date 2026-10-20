@@ -5,7 +5,7 @@ This reference describes **Anomalog's own FastAPI service**. The existing [api-r
 ## Base URL and conventions
 
 - Local HTTP base: `http://localhost:8000`; all application routes start with `/api`.
-- JSON request and response bodies use `snake_case`. Timestamps are ISO 8601 date-times with a timezone, for example `2026-10-06T10:00:00Z`.
+- JSON request and response bodies use `snake_case`, except the shared investigation record fields `startTime`, `endTime`, and `updatedAt`. Timestamps are ISO 8601 date-times with a timezone, for example `2026-10-06T10:00:00Z`.
 - In production, send `X-API-Key: <ANOMALOG_API_KEY>` on HTTP requests and the Live Tail WebSocket handshake. Missing or wrong keys return HTTP `401` (or reject the WebSocket handshake). `GET /api/health` and HTTP `OPTIONS` do not require a key. Development permits unauthenticated calls when `ANOMALOG_API_KEY` is unset. The HTTP rate limit is per client IP and backend process (default 120 requests/minute). A rate-limited request returns HTTP `429` with `{"detail":"Too many requests. Slow down and try again shortly."}`.
 - Pydantic validation failures use FastAPI's HTTP `422` detail format. Application errors use `{"detail":"message"}` (usually `400`, `404`, `429`, or `502`). AWS and other unhandled failures may return `500`.
 - Search cursors and AWS next tokens are opaque. Send the returned value unchanged with the same search inputs; `null` means there is no next page.
@@ -151,6 +151,42 @@ Response fields:
 ### `POST /api/analysis/test-connection`
 
 Request: `{"provider":"litellm","api_key":null,"model":null,"base_url":null}`. The same provider names and optional settings apply as above. Response: `{"success":true,"message":"Connected successfully.","model":"effective-model"}`. A provider connection or configuration failure, including an unapproved base URL, is normally returned as HTTP `200` with `success:false` and a diagnostic `message`.
+
+## Shared investigation history
+
+Completed conversations are shared across all application callers. They contain questions, analysis responses, source and time range; they do not include original log events or provider API keys. The backend masks question and answer text again before saving. Anyone with access to the application can list, update, or delete any shared record.
+
+| Method | Path | Input | Output |
+| --- | --- | --- | --- |
+| `GET` | `/api/investigations` | Query `limit` (1–100, default 50), `offset` (≥0, default 0) | `{"items":[SavedInvestigation],"next_offset":number|null}` ordered newest first |
+| `PUT` | `/api/investigations/{investigation_id}` | Record body below; path ID contains only letters, digits, `_`, `-` (1–128 chars) | Full saved record with server-generated `updatedAt` |
+| `POST` | `/api/investigations/import` | `{"items":[SavedInvestigation]}` (at most 20) | `{"imported":number}`; duplicate IDs are not overwritten |
+| `DELETE` | `/api/investigations/{investigation_id}` | None | 204 even if already deleted |
+
+Example `PUT` body:
+
+```json
+{
+  "source": "CloudWatch",
+  "startTime": "2026-10-20T00:00:00Z",
+  "endTime": "2026-10-20T01:00:00Z",
+  "turns": [{
+    "id": 0,
+    "question": "What failed?",
+    "response": {
+      "analysis": "The service timed out.",
+      "chunks_analyzed": 1,
+      "chunks_total": 1,
+      "lines_considered": 1,
+      "lines_skipped_by_prefilter": 0,
+      "model": "example-model",
+      "warnings": []
+    }
+  }]
+}
+```
+
+The full `response` shape is `AnalysisResponse` above. The saved record adds `id` and `updatedAt`. A record needs 1–100 turns; serialized turns are capped at 1 MB. Invalid fields return 422; oversized history returns 400. Production SQLite is retained in the `history_data` Docker volume.
 
 ## CloudWatch Live Tail WebSocket
 

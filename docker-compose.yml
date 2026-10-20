@@ -6,12 +6,14 @@ services:
     volumes:
       - ./backend/app:/app/app
       - ${HOME}/.aws:/root/.aws:ro
+      - history_data:/data
     env_file:
       - ./backend/.env
     environment:
       - AWS_ACCESS_KEY_ID
       - AWS_SECRET_ACCESS_KEY
       - AWS_SESSION_TOKEN
+      - HISTORY_DB_PATH=/data/history.sqlite3
 
   frontend:
     build: ./frontend
@@ -24,3 +26,6 @@ services:
       - ./frontend/.env
     depends_on:
       - backend
+
+volumes:
+  history_data:

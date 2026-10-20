@@ -158,11 +158,11 @@ At least one visible event and a working provider configuration.
 ### Workflow
 Ask question → submit visible rows/history → backend re-masks and selects evidence → provider calls → show answer, warnings, citations → optionally follow up or save conversation.
 ### Business rules
-Request event/history caps, token and chunk budgets, provider pacing; completed conversations saved locally, up to 20.
+Request event/history caps, token and chunk budgets, provider pacing; completed conversations saved in shared SQLite history.
 ### Inputs
 `AnalysisRequest`; optional provider overrides and history.
 ### Outputs
-`AnalysisResponse` with answer, counts, model, warnings; browser history entry.
+`AnalysisResponse` with answer, counts, model, warnings; shared history entry.
 ### Error cases
 Bad input 400/422, first-chunk quota 429, provider failure 502, or partial answer with warnings.
 ### Edge cases
@@ -172,7 +172,7 @@ Request messages are locally re-masked before model calls; question/history may 
 ### Acceptance criteria
 Only visible rows are submitted; provider and coverage are accurate; citations navigate to loaded lines when present.
 ### Related requirements
-REQ-FUNC-011, REQ-FUNC-013, REQ-SEC-002, REQ-REL-003.
+REQ-FUNC-011, REQ-FUNC-014, REQ-SEC-002, REQ-REL-003, REQ-REL-004.
 ### Related components
 `frontend/src/components/LogSummary/`, `backend/app/services/anomaly_service.py`, `log_filter.py`; [analysis.md](analysis.md).
 

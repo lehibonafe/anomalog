@@ -15,7 +15,7 @@
 
 Synchronous search routes call boto3 through services and return Pydantic response objects. Search services apply time/limit checks, read AWS, mask text, and issue cursors. Anomaly analysis is async: it re-masks submitted messages, selects evidence, compacts duplicates and JSON, chunks prompt input, paces calls by provider, and consolidates answers. `get_settings`, AWS sessions, masking client, and `get_anomaly_service` are cached per process with `lru_cache`.
 
-React Query holds request state and log-group/config query caches; Zustand holds selected source, range, loaded events, pagination requests, model settings, and a generation counter. `LogSummary.tsx` alone persists completed chat turns in `localStorage`. There is no server-side user session or durable event store. See [data-model.md](data-model.md).
+React Query holds request state and log-group/config/history query caches; Zustand holds selected source, range, loaded events, pagination requests, model settings, and a generation counter. `LogSummary.tsx` saves completed chat turns through the backend and imports old `localStorage` entries once. There is no server-side user session or durable log-event store. See [data-model.md](data-model.md).
 
 ## Concurrency and failures
 

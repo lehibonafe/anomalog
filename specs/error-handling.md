@@ -12,8 +12,8 @@
 | AWS/unhandled failure | May return FastAPI 500 | Discovery/search failure; no uniform AWS error mapping found. |
 | External masker failure | Warning log, then local regex fallback | User can continue with reduced masking coverage. `masking.py`. |
 | Live Tail protocol/runtime | WebSocket `error`, `session_stopped`, or `session_ended`; close 1008/1013 for listed cases | Stream ends; UI shows error or reason. `routes_cloudwatch.py`, `LiveTailControls.tsx`. |
-| Database failure | **Not currently applicable** | No database exists. |
-| Authentication/authorization failure | **Not currently applicable** in app | No app identity; AWS IAM denial may surface as AWS error. |
+| Database failure | SQLite I/O error may return 500 | Shared history read/write unavailable; UI shows load or save error. |
+| Authentication/authorization failure | Missing or wrong machine key returns 401 | No end-user identity; AWS IAM denial may surface as AWS error. |
 
 Provider adapters use bounded SDK timeouts and disable SDK retries; `AnomalyService` owns retries for rate-limit signals using exponential waits. The external masker uses an HTTP timeout and fail-fast fallback within a batch. AWS search routes do not declare an app-level timeout or retry strategy. Live Tail has an inactivity timeout and a bounded async queue. See [reliability.md](reliability.md).
 

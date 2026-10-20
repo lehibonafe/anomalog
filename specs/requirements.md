@@ -16,7 +16,8 @@ IDs are stable. Each row is an intended obligation based on the current feature 
 | REQ-FUNC-010 | Functional | Export visible rows as JSON, CSV, or text. | Medium | `LogViewer.tsx` serialization and download. |
 | REQ-FUNC-011 | Functional | Analyze submitted evidence with provider selection, follow-up history, coverage counts, and partial-result warnings. | High | `AnomalyService.analyze`; `test_anomaly_service.py`, `test_investigator_analysis.py`. |
 | REQ-FUNC-012 | Functional | Keep model settings separate by provider and offer a connection diagnostic. | Medium | Selection store, Model settings panel, test-connection route. |
-| REQ-FUNC-013 | Functional | Save bounded completed investigation history in browser local storage and allow deletion. | Medium | `LogSummary.tsx`; max 20 saved conversations. |
+| REQ-FUNC-013 | Historical | Earlier browser local storage history, retained only for migration. | Medium | `LogSummary.tsx` imports existing entries once. |
+| REQ-FUNC-014 | Functional | Save, list, update, and delete completed investigations in one shared backend history across browser devices without individual accounts. | High | History API and storage tests; frontend test/lint/build; manual two-browser check. |
 | REQ-SEC-001 | Security | Mask AWS log text before returning it to the browser, with local fallback if external masking fails. | Critical | Masking service tests and search/stream service tests. |
 | REQ-SEC-002 | Security | Re-mask client-submitted events before sending them to an LLM. | Critical | `AnomalyService.analyze`; masking tests. |
 | REQ-SEC-003 | Security | Keep server credentials out of `/api/config` and browser AWS access. | Critical | Meta route returns flags; AWS calls live in backend. |
@@ -29,6 +30,7 @@ IDs are stable. Each row is an intended obligation based on the current feature 
 | REQ-REL-001 | Reliability | Close Live Tail on stop, disconnect, inactivity, AWS end, or slow consumer. | High | WebSocket route and stream tests. |
 | REQ-REL-002 | Reliability | Continue with local masking when the external masker fails. | High | `mask_messages_batch`; batch failure tests. |
 | REQ-REL-003 | Reliability | Return usable partial batch answers when later LLM calls fail, with warnings. | Medium | `AnomalyService`; partial-failure tests. |
+| REQ-REL-004 | Reliability | Persist shared history across backend container recreation and show a retryable error when saving fails. | High | SQLite volume in Compose; storage tests; UI state review. |
 | REQ-OPS-001 | Operational | Expose health and safe capability configuration endpoints. | Medium | `routes_meta.py`; health is a shallow process check. |
 | REQ-OPS-002 | Operational | Use environment-backed settings and optional monitoring-account role assumption. | High | `config.py`, `aws_session.py`, Compose, AWS session tests. |
 | REQ-OPS-003 | Operational | Verify changes with mocked backend tests and frontend test/lint/build; sync API docs for contract changes. | High | `AGENTS.md`; [testing.md](testing.md). |
@@ -45,7 +47,7 @@ IDs are stable. Each row is an intended obligation based on the current feature 
 | PG-001 | FEATURE-003 | REQ-FUNC-003, REQ-FUNC-004, REQ-FUNC-005 | `cloudtrail_service.py`, `useCloudTrailSearch.ts` | `test_cloudtrail_service.py` |
 | PG-003 | FEATURE-004 | REQ-FUNC-006, REQ-FUNC-007, REQ-REL-001 | `routes_cloudwatch.py`, `live_tail_service.py`, `LiveTailControls.tsx` | `test_live_tail_service.py`; browser flow gap |
 | PG-001 | FEATURE-005 | REQ-FUNC-008, REQ-FUNC-009, REQ-FUNC-010, REQ-PERF-002, REQ-SEC-004 | `LogViewer/`, `utils/logFacets.ts` | `logFacets.test.ts`; export/browser gap |
-| PG-002 | FEATURE-006 | REQ-FUNC-011, REQ-FUNC-013, REQ-REL-003 | `anomaly_service.py`, `LogSummary.tsx` | `test_anomaly_service.py`; history UI gap |
+| PG-002 | FEATURE-006 | REQ-FUNC-011, REQ-FUNC-014, REQ-REL-003, REQ-REL-004 | `anomaly_service.py`, `investigation_history.py`, `LogSummary.tsx` | `test_anomaly_service.py`, `test_investigation_history.py`; history UI gap |
 | PG-002 | FEATURE-007 | REQ-FUNC-012, REQ-SEC-003 | LLM registry/providers, Model settings UI | provider tests; UI interaction gap |
 | PG-004 | FEATURE-008 | REQ-SEC-001, REQ-SEC-002, REQ-REL-002 | `masking.py`, `masking_http_client.py` | `test_masking.py`, `test_masking_batch.py` |
 

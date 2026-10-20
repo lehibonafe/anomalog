@@ -75,6 +75,9 @@ class Settings(BaseSettings):
     # Inbound API abuse guard (per-client-IP, per-process — see InboundRateLimiter)
     inbound_rate_limit_per_minute: int = 120
 
+    # Mount the directory on a persistent volume in container deployments.
+    history_db_path: str = "data/history.sqlite3"
+
     @field_validator("anomalog_api_key", mode="before")
     @classmethod
     def empty_api_key_is_unset(cls, value: object) -> object:

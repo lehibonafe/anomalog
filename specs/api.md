@@ -1,6 +1,6 @@
 # Anomalog API
 
-This file lists every route registered in `backend/app/main.py`: eight HTTP routes and one WebSocket route. All HTTP paths are under `/api`. When `ANOMALOG_API_KEY` is configured, every HTTP route except health and preflight requires `X-API-Key`; missing or wrong keys return 401. Live Tail requires the same header before its WebSocket handshake. Production refuses startup without a key. The shared key grants one machine access level, without per-user authorization. Every HTTP route may return 429 from the per-IP, per-process middleware; malformed Pydantic input normally returns FastAPI 422. Exact executable shapes come from `backend/app/schemas/`, route declarations, and `/openapi.json`; the [root API reference](../api-reference.md) provides examples.
+This file lists every route registered in `backend/app/main.py`: twelve HTTP routes and one WebSocket route. All HTTP paths are under `/api`. When `ANOMALOG_API_KEY` is configured, every HTTP route except health and preflight requires `X-API-Key`; missing or wrong keys return 401. Live Tail requires the same header before its WebSocket handshake. Production refuses startup without a key. The shared key grants one machine access level, without per-user authorization. Every HTTP route may return 429 from the per-IP, per-process middleware; malformed Pydantic input normally returns FastAPI 422. Exact executable shapes come from `backend/app/schemas/`, route declarations, and `/openapi.json`; the [root API reference](../api-reference.md) provides examples.
 
 ### GET /api/health
 
@@ -33,6 +33,19 @@ This file lists every route registered in `backend/app/main.py`: eight HTTP rout
 ### POST /api/analysis/test-connection
 
 **Purpose:** Test selected model destination with a small synthetic prompt. **Authentication:** Shared X-API-Key when configured. **Authorization:** None in app; provider credential may be needed. **Request Parameters:** None. **Request Body:** optional `provider` (default `litellm`), `api_key`, `model`, `base_url`. **Response:** `{success:boolean,message:string,model:string}`. **HTTP Status Codes:** Usually 200 even when `success:false`; 422 for shape errors, middleware 429, possible 500 for unexpected setup failure. **Validation:** Provider enum, exact base URL allowlist, and SDK setup. **Possible Errors:** Missing key, unapproved or unreachable URL, upstream quota or refusal appear as `success:false` in normal response. **Side Effects:** One provider request if configuration is accepted; may incur provider cost. Source: `routes_analysis.py`, `anomaly_service.py`.
+
+### Shared investigation history
+
+All four routes use the same shared machine-key access level; there is no individual owner. Records contain source, start/end time, one or more question/analysis turns, and server-controlled `updatedAt`. They do not store original log events or provider API keys. Questions and answer text are locally masked before persistence. A record's serialized turns may not exceed 1 MB.
+
+| Method | Path | Parameters/body | Response and effect |
+| --- | --- | --- | --- |
+| GET | `/api/investigations` | `limit` 1–100 (default 50), `offset` ≥0 | `items[]`, `next_offset`; newest first. |
+| PUT | `/api/investigations/{investigation_id}` | ID 1–128 safe characters; source, time range, 1–100 turns | Saved record with server update time; inserts or replaces by ID. |
+| POST | `/api/investigations/import` | `items[]` up to 20 saved records | `imported` count; existing IDs remain unchanged. |
+| DELETE | `/api/investigations/{investigation_id}` | ID 1–128 safe characters | 204, including missing IDs. |
+
+Invalid shapes return 422, oversized turns return 400, and the HTTP middleware can return 401 or 429. SQLite I/O errors may return 500. Sources: `routes_investigations.py`, `schemas/investigations.py`, `investigation_history.py`.
 
 ### WS /api/cloudwatch/logs/live-tail
 

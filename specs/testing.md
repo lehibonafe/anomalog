@@ -11,7 +11,7 @@ Backend uses pytest/pytest-asyncio under `backend/tests/`; tests mock AWS and mo
 | FEATURE-003 | REQ-FUNC-003, REQ-FUNC-004 | `backend/tests/test_cloudtrail_service.py` modes, filters, order, pagination. |
 | FEATURE-004 | REQ-FUNC-006, REQ-FUNC-007, REQ-REL-001 | `backend/tests/test_live_tail_service.py` stream/session behavior; no automated browser confirmation flow. |
 | FEATURE-005 | REQ-FUNC-008, REQ-FUNC-009, REQ-FUNC-010, REQ-PERF-002 | `frontend/src/utils/logFacets.test.ts`; no exporter or full dashboard interaction test. |
-| FEATURE-006 | REQ-FUNC-011, REQ-FUNC-013, REQ-REL-003 | `test_anomaly_service.py`, `test_investigator_analysis.py`, `test_log_filter.py`; no browser history flow test. |
+| FEATURE-006 | REQ-FUNC-011, REQ-FUNC-014, REQ-REL-003, REQ-REL-004 | `test_anomaly_service.py`, `test_investigator_analysis.py`, `test_log_filter.py`, `test_investigation_history.py`; manual two-browser flow still needed. |
 | FEATURE-007 | REQ-FUNC-012 | `backend/tests/services/llm/test_*_provider.py`, `test_registry.py`, selection store tests; no Model settings UI test. |
 | FEATURE-008 | REQ-SEC-001, REQ-SEC-002, REQ-REL-002 | `test_masking.py`, `test_masking_batch.py`, anomaly/search/Live Tail service tests. |
 

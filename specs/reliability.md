@@ -4,7 +4,7 @@
 
 Search pages are bounded and resumable with opaque cursors; selected CloudWatch groups are merged without dropping buffered events. The browser ignores stale search responses. External masking failure falls back to local regex masking; model chunk failures can yield partial answers and warnings. Provider SDK calls have a bounded timeout and app-managed retry for rate-limit signals. Live Tail closes on stop, disconnect, inactivity, AWS termination, or slow consumer and uses a bounded queue. Evidence: `group_pagination.py`, `selectionStore.ts`, `masking.py`, `anomaly_service.py`, `routes_cloudwatch.py`.
 
-The system has single points of failure: one FastAPI process/container for a local Compose deployment, one configured AWS region/identity, the browser's in-memory loaded data, and the chosen model endpoint for each analysis. Per-process limiters do not coordinate multiple workers. No persistent server queue, failover, autoscaling, backup, disaster-recovery automation, or application availability target is checked in. Database backup is **Not currently applicable** because no application database exists; browser local-storage history and AWS logs have separate retention outside app control.
+The system has single points of failure: one FastAPI process/container for a local Compose deployment, one configured AWS region/identity, the browser's in-memory loaded data, the SQLite history volume, and the chosen model endpoint for each analysis. Per-process limiters do not coordinate multiple workers. No persistent server queue, failover, autoscaling, backup, disaster-recovery automation, or application availability target is checked in. Shared-history backup is an operator responsibility; AWS logs have separate retention outside app control.
 
 ## Failure and recovery matrix
 
@@ -15,7 +15,7 @@ The system has single points of failure: one FastAPI process/container for a loc
 | Provider quota/outage | Retry rate limits; partial or failed analysis | Retry later, narrow evidence, or select another configured provider. |
 | Browser disconnect during Live Tail | Backend closes stream | Start a new confirmed session; lost browser-only events are not recovered. |
 | Backend restart | In-flight requests/streams end; per-process state resets | Reload UI and rerun searches; continuation cursor compatibility across versions is not guaranteed. |
-| Browser storage cleared | Saved investigation history disappears | No server recovery path exists. |
+| Browser storage cleared | Unsynced legacy history disappears; shared history remains | Restore legacy browser storage only if an import failed. |
 
 ## Proposed reliability measures
 

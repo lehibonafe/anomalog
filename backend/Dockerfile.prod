@@ -5,7 +5,9 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt \
     && groupadd --gid 10001 app \
-    && useradd --uid 10001 --gid app --create-home app
+    && useradd --uid 10001 --gid app --create-home app \
+    && mkdir -p /data \
+    && chown app:app /data
 
 COPY app ./app
 

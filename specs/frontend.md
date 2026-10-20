@@ -18,7 +18,7 @@ The feature details live in [log-search.md](log-search.md), [live-tail.md](live-
 | `LogSummary/LogSummary.tsx`, `AnalysisResult.tsx` | FEATURE-006 | Question/chat/history and citation navigation. |
 | `LogSummary/ModelSettingsControl.tsx`, `ModelSettingsPanel.tsx` | FEATURE-007 | Provider selection and connection test. |
 
-`frontend/src/api/client.ts` uses Axios with `VITE_API_BASE_URL`; `api/types.ts` mirrors backend payloads. React Query handles remote query/mutation status (`hooks/`, `state/queryClient.ts`), Zustand owns selections and loaded events (`state/selectionStore.ts`), and component state owns temporary dialogs, filters, and chat interaction. Only completed investigation history is persisted to `localStorage`.
+`frontend/src/api/client.ts` uses Axios with `VITE_API_BASE_URL`; `api/types.ts` mirrors backend payloads. React Query handles remote query/mutation status (`hooks/`, `state/queryClient.ts`), Zustand owns selections and loaded events (`state/selectionStore.ts`), and component state owns temporary dialogs, filters, and chat interaction. Completed investigation history is persisted through the backend; old `localStorage` entries are imported once.
 
 ## Required behavior
 
@@ -26,7 +26,7 @@ The feature details live in [log-search.md](log-search.md), [live-tail.md](live-
 - The source selector switches between CloudWatch and CloudTrail. A source change clears loaded rows, pagination state, and highlighted lines and invalidates pending results from the previous source.
 - Search controls require a selected source and valid time range. A new search replaces the current result; **Load more** appends using the returned cursor. Responses from superseded searches or an active Live Tail session cannot change the visible result.
 - Loaded events have unique line indices for citations and navigation, including appended pages and Live Tail batches. The viewer filters, dashboard, chart, exports, and investigator operate on the appropriate loaded or visible subset described in the feature specs.
-- The investigator submits only the currently visible rows, carries follow-up history, offers retry or stop on a failed or pending request, and links cited lines back to loaded events. Completed conversations are saved in browser local storage with a bounded history; deleting a saved conversation removes it from that store.
+- The investigator submits only the currently visible rows, carries follow-up history, offers retry or stop on a failed or pending request, and links cited lines back to loaded events. Completed conversations are saved in shared backend history; deletion removes an entry for all callers. Restored citations are plain text because their original log rows are not stored.
 - Model settings keep each provider's key, model, and base URL separate. The UI identifies the destination for connection tests and analysis in Model settings. No server credential is exposed by `/api/config`.
 - Starting Live Tail requires a cost confirmation. The browser shows session, sampling, paused buffer, dropped event, and estimated cost information while the backend controls the AWS stream. Leaving the page or changing sources closes the browser session.
 - The interface communicates loading, empty, disabled, and error states for AWS reads and AI calls. Interactive controls remain keyboard reachable, and cited lines can be opened from the answer.

@@ -17,7 +17,7 @@ flowchart TD
   G --> K[Export visible rows]
 ```
 
-Source switching clears the loaded result and invalidates old searches. A new search replaces events; `Load more` appends. The investigator receives the viewer's filtered events, not all rows held in browser state. Completed conversations may be saved in browser local storage; this is not a server account feature. Implementations: `frontend/src/App.tsx`, `useCloudWatchSearch.ts`, `useCloudTrailSearch.ts`, `LogViewer.tsx`, `LogSummary.tsx`.
+Source switching clears the loaded result and invalidates old searches. A new search replaces events; `Load more` appends. The investigator receives the viewer's filtered events, not all rows held in browser state. Completed conversations are saved in shared SQLite history and can be opened from another browser; there is no server account feature. Implementations: `frontend/src/App.tsx`, `useCloudWatchSearch.ts`, `useCloudTrailSearch.ts`, `LogViewer.tsx`, `LogSummary.tsx`.
 
 ## Live incident view
 

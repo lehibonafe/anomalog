@@ -8,8 +8,11 @@ services:
     environment:
       CORS_ORIGINS: '["http://127.0.0.1:${PROD_HTTP_PORT:-8080}","http://localhost:${PROD_HTTP_PORT:-8080}"]'
       REQUIRE_API_KEY: "true"
+      HISTORY_DB_PATH: /data/history.sqlite3
     expose:
       - "8000"
+    volumes:
+      - history_data:/data
     restart: unless-stopped
     init: true
     healthcheck:
@@ -28,6 +31,12 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    environment:
+      ANOMALOG_API_KEY: ${ANOMALOG_API_KEY:?Set ANOMALOG_API_KEY for the frontend proxy}
+      NGINX_ENVSUBST_FILTER: '^ANOMALOG_API_KEY$'
     ports:
       - "127.0.0.1:${PROD_HTTP_PORT:-8080}:8080"
     restart: unless-stopped
+
+volumes:
+  history_data:

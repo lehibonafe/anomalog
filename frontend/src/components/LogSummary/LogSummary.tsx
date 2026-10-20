@@ -1,13 +1,14 @@
 import axios, { isAxiosError } from 'axios'
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 
-import type { AnalysisResponse, ChatMessage, LogEvent } from '../../api/types'
+import type { AnalysisResponse, ChatMessage, LogEvent, InvestigationTurn, SavedInvestigation } from '../../api/types'
+import { fetchInvestigations, importInvestigations, removeInvestigation, saveInvestigation } from '../../api/investigations'
 import { useAnomalyAnalysis } from '../../hooks/useAnomalyAnalysis'
 import { useSelectionStore } from '../../state/selectionStore'
 import { AnalysisResult } from './AnalysisResult'
 
 const INVESTIGATION_HISTORY_KEY = 'anomalog.investigation-history.v1'
-const MAX_SAVED_INVESTIGATIONS = 20
 
 const CLOUDWATCH_QUESTIONS = [
   'What errors are repeating, and which service is most affected?',
@@ -28,21 +29,6 @@ function GenerateIcon() {
       <path d='M15.5 12.5c.15 1.5 1 2.35 2.5 2.5-1.5.15-2.35 1-2.5 2.5-.15-1.5-1-2.35-2.5-2.5 1.5-.15 2.35-1 2.5-2.5Z' />
     </svg>
   )
-}
-
-interface InvestigationTurn {
-  id: number
-  question: string
-  response: AnalysisResponse
-}
-
-interface SavedInvestigation {
-  id: string
-  source: string
-  startTime: string
-  endTime: string
-  updatedAt: string
-  turns: InvestigationTurn[]
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -85,12 +71,19 @@ function loadInvestigationHistory(): SavedInvestigation[] {
   }
 }
 
-function persistInvestigationHistory(investigations: SavedInvestigation[]) {
-  try {
-    window.localStorage.setItem(INVESTIGATION_HISTORY_KEY, JSON.stringify(investigations))
-  } catch {
-    // History is a convenience; the active chat should still work if storage is unavailable.
+async function loadSharedHistory(offset: number) {
+  if (offset === 0) {
+    const legacy = loadInvestigationHistory()
+    if (legacy.length > 0) {
+      await importInvestigations(legacy)
+      try {
+        window.localStorage.removeItem(INVESTIGATION_HISTORY_KEY)
+      } catch {
+        // The import is idempotent if browser storage cannot be cleared.
+      }
+    }
   }
+  return fetchInvestigations(offset)
 }
 
 function investigationId() {
@@ -132,7 +125,9 @@ function conversationHistory(turns: InvestigationTurn[]): ChatMessage[] {
   ]).slice(-40)
 }
 
-function InvestigationAnswer({ response }: { response: AnalysisResponse }) {
+function InvestigationAnswer({ response, evidenceAvailable }: {
+  response: AnalysisResponse; evidenceAvailable: boolean
+}) {
   const isPartial = response.lines_analyzed < response.lines_submitted || response.lines_shortened > 0
   const hasAnswer = response.chunks_analyzed > 0 && response.chunks_total > 0
   const linesSentToModel = response.lines_sent_to_model ?? response.lines_analyzed
@@ -146,6 +141,7 @@ function InvestigationAnswer({ response }: { response: AnalysisResponse }) {
         <AnalysisResult
           text={response.analysis.trim() || 'The model returned no answer.'}
           className='log-summary-result'
+          evidenceAvailable={evidenceAvailable}
         />
       ) : (
         <p className='log-investigator-empty-answer'>No answer could be created from these logs.</p>
@@ -177,6 +173,7 @@ function InvestigationAnswer({ response }: { response: AnalysisResponse }) {
 
 interface InvestigationConversationProps {
   turns: InvestigationTurn[]
+  evidenceAvailable: boolean
   pendingQuestion: string | null
   error: string | null
   failedQuestion: string | null
@@ -185,6 +182,7 @@ interface InvestigationConversationProps {
 
 function InvestigationConversation({
   turns,
+  evidenceAvailable,
   pendingQuestion,
   error,
   failedQuestion,
@@ -195,7 +193,7 @@ function InvestigationConversation({
       {turns.map((turn) => (
         <article className='log-investigator-turn' key={turn.id}>
           <p className='log-investigator-question'>{turn.question}</p>
-          <InvestigationAnswer response={turn.response} />
+          <InvestigationAnswer response={turn.response} evidenceAvailable={evidenceAvailable} />
         </article>
       ))}
 
@@ -234,12 +232,24 @@ export function LogSummary({ events }: LogSummaryProps) {
   const llmModel = useSelectionStore((state) => state.llmModel)
   const llmBaseUrl = useSelectionStore((state) => state.llmBaseUrl)
   const analysis = useAnomalyAnalysis()
+  const queryClient = useQueryClient()
+  const history = useInfiniteQuery({
+    queryKey: ['investigations'],
+    queryFn: ({ pageParam }) => loadSharedHistory(pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.next_offset ?? undefined,
+    refetchOnWindowFocus: true,
+  })
+  const saveHistory = useMutation({ mutationFn: saveInvestigation })
+  const removeHistory = useMutation({ mutationFn: removeInvestigation })
+  const savedInvestigations = history.data?.pages.flatMap((page) => page.items) ?? []
   const abortControllerRef = useRef<AbortController | null>(null)
   const compactConversationRef = useRef<HTMLDivElement | null>(null)
   const expandedConversationRef = useRef<HTMLDivElement | null>(null)
   const chatDialogRef = useRef<HTMLDialogElement | null>(null)
   const [turns, setTurns] = useState<InvestigationTurn[]>([])
-  const [savedInvestigations, setSavedInvestigations] = useState(loadInvestigationHistory)
+  const [evidenceAvailable, setEvidenceAvailable] = useState(true)
+  const [unsavedInvestigation, setUnsavedInvestigation] = useState<SavedInvestigation | null>(null)
   const [activeInvestigationId, setActiveInvestigationId] = useState<string | null>(null)
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false)
   const [question, setQuestion] = useState('')
@@ -257,12 +267,22 @@ export function LogSummary({ events }: LogSummaryProps) {
       ? 'No logs match the current filters'
       : 'Load logs to ask a question'
   const hasConversation = turns.length > 0 || pendingQuestion !== null || error !== null
-  const canOpenChat = hasConversation || savedInvestigations.length > 0
+
+  function persistSharedHistory(record: SavedInvestigation) {
+    setUnsavedInvestigation(record)
+    saveHistory.mutate(record, {
+      onSuccess: () => {
+        setUnsavedInvestigation(null)
+        void queryClient.invalidateQueries({ queryKey: ['investigations'] })
+      },
+    })
+  }
 
   useEffect(() => {
     abortControllerRef.current?.abort()
     abortControllerRef.current = null
     setTurns([])
+    setEvidenceAvailable(true)
     setActiveInvestigationId(null)
     setPendingQuestion(null)
     setFailedQuestion(null)
@@ -279,7 +299,7 @@ export function LogSummary({ events }: LogSummaryProps) {
 
   function askQuestion(questionToAsk: string) {
     const trimmedQuestion = questionToAsk.trim()
-    if (!hasVisibleLogs || !trimmedQuestion || abortControllerRef.current) return
+    if (!hasVisibleLogs || !trimmedQuestion || abortControllerRef.current || saveHistory.isPending || removeHistory.isPending) return
 
     const controller = new AbortController()
     abortControllerRef.current = controller
@@ -323,12 +343,7 @@ export function LogSummary({ events }: LogSummaryProps) {
 
           setTurns(nextTurns)
           setActiveInvestigationId(id)
-          setSavedInvestigations((current) => {
-            const next = [saved, ...current.filter((item) => item.id !== id)]
-              .slice(0, MAX_SAVED_INVESTIGATIONS)
-            persistInvestigationHistory(next)
-            return next
-          })
+          persistSharedHistory(saved)
         },
         onError: (requestError) => {
           if (axios.isCancel(requestError)) return
@@ -358,9 +373,9 @@ export function LogSummary({ events }: LogSummaryProps) {
     startNewInvestigation()
   }
 
-  function startNewInvestigation() {
-    if (analysis.isPending) return
+  function resetInvestigation() {
     setTurns([])
+    setEvidenceAvailable(true)
     setActiveInvestigationId(null)
     setQuestion('')
     setFailedQuestion(null)
@@ -368,9 +383,15 @@ export function LogSummary({ events }: LogSummaryProps) {
     setHistoryDrawerOpen(false)
   }
 
+  function startNewInvestigation() {
+    if (analysis.isPending || saveHistory.isPending || removeHistory.isPending) return
+    resetInvestigation()
+  }
+
   function restoreInvestigation(investigation: SavedInvestigation) {
-    if (analysis.isPending) return
+    if (analysis.isPending || saveHistory.isPending || removeHistory.isPending) return
     setTurns(investigation.turns)
+    setEvidenceAvailable(false)
     setActiveInvestigationId(investigation.id)
     setQuestion('')
     setFailedQuestion(null)
@@ -379,18 +400,19 @@ export function LogSummary({ events }: LogSummaryProps) {
   }
 
   function deleteInvestigation() {
-    if (!activeInvestigationId || analysis.isPending) return
-    setSavedInvestigations((current) => {
-      const next = current.filter((item) => item.id !== activeInvestigationId)
-      persistInvestigationHistory(next)
-      return next
+    if (!activeInvestigationId || analysis.isPending || saveHistory.isPending || removeHistory.isPending) return
+    removeHistory.mutate(activeInvestigationId, {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: ['investigations'] })
+        resetInvestigation()
+      },
     })
-    startNewInvestigation()
   }
 
   function openChat() {
     setHistoryDrawerOpen(false)
     chatDialogRef.current?.showModal()
+    void history.refetch()
   }
 
   return (
@@ -403,22 +425,28 @@ export function LogSummary({ events }: LogSummaryProps) {
             <p>{availabilityText}</p>
           </div>
         </div>
-        {canOpenChat && (
-          <div className='log-investigator-header-actions'>
-            <button type='button' onClick={openChat}>
-              <svg viewBox='0 0 20 20' aria-hidden='true'>
-                <path d='M3 4.5h14v9H8l-4 3v-3H3z' />
-              </svg>
-              View chat
+        <div className='log-investigator-header-actions'>
+          <button type='button' onClick={openChat}>
+            <svg viewBox='0 0 20 20' aria-hidden='true'>
+              <path d='M3 4.5h14v9H8l-4 3v-3H3z' />
+            </svg>
+            View chat
+          </button>
+          {hasConversation && !analysis.isPending && (
+            <button type='button' className='log-investigator-clear'
+              disabled={saveHistory.isPending || removeHistory.isPending} onClick={clearInvestigation}>
+              Clear
             </button>
-            {hasConversation && !analysis.isPending && (
-              <button type='button' className='log-investigator-clear' onClick={clearInvestigation}>
-                Clear
-              </button>
-            )}
-          </div>
-        )}
+          )}
+        </div>
       </div>
+
+      {saveHistory.isPending && <p className='hint' role='status'>Saving to shared history…</p>}
+      {unsavedInvestigation && saveHistory.isError && (
+        <p className='error-text' role='alert'>History was not saved.{' '}
+          <button type='button' onClick={() => persistSharedHistory(unsavedInvestigation)}>Retry save</button>
+        </p>
+      )}
 
       <div className='log-summary-body'>
         <form className='log-investigator-form' onSubmit={submitQuestion}>
@@ -428,7 +456,7 @@ export function LogSummary({ events }: LogSummaryProps) {
               maxLength={1000}
               aria-label='Ask about the visible logs'
               value={question}
-              disabled={!hasVisibleLogs || analysis.isPending}
+              disabled={!hasVisibleLogs || analysis.isPending || saveHistory.isPending || removeHistory.isPending}
               placeholder='Ask a question about these logs…'
               onChange={(event) => setQuestion(event.target.value)}
             />
@@ -438,7 +466,7 @@ export function LogSummary({ events }: LogSummaryProps) {
               <button
                 type='submit'
                 className='btn-primary'
-                disabled={!hasVisibleLogs || !question.trim()}
+                disabled={!hasVisibleLogs || !question.trim() || saveHistory.isPending || removeHistory.isPending}
               >
                 <GenerateIcon />
                 Generate
@@ -470,6 +498,7 @@ export function LogSummary({ events }: LogSummaryProps) {
           >
             <InvestigationConversation
               turns={turns}
+              evidenceAvailable={evidenceAvailable}
               pendingQuestion={pendingQuestion}
               error={error}
               failedQuestion={failedQuestion}
@@ -533,21 +562,24 @@ export function LogSummary({ events }: LogSummaryProps) {
             <button
               type='button'
               className='log-investigator-new-button'
-              disabled={analysis.isPending}
+              disabled={analysis.isPending || saveHistory.isPending || removeHistory.isPending}
               onClick={startNewInvestigation}
             >
               <span aria-hidden='true'>＋</span>
               New investigation
             </button>
             <div className='log-investigator-history-list'>
-              {savedInvestigations.length === 0 ? (
+              {history.isPending && <p className='log-investigator-history-empty'>Loading shared history…</p>}
+              {history.isError && <p className='log-investigator-history-empty' role='alert'>Could not load shared history.</p>}
+              {history.isError && <button type='button' onClick={() => void history.refetch()}>Retry loading</button>}
+              {savedInvestigations.length === 0 && !history.isPending && !history.isError ? (
                 <p className='log-investigator-history-empty'>Completed conversations will appear here.</p>
               ) : savedInvestigations.map((investigation) => (
                 <button
                   type='button'
                   className={`log-investigator-history-entry${activeInvestigationId === investigation.id ? ' active' : ''}`}
                   key={investigation.id}
-                  disabled={analysis.isPending}
+                  disabled={analysis.isPending || saveHistory.isPending || removeHistory.isPending}
                   aria-current={activeInvestigationId === investigation.id ? 'true' : undefined}
                   onClick={() => restoreInvestigation(investigation)}
                 >
@@ -559,10 +591,17 @@ export function LogSummary({ events }: LogSummaryProps) {
                 </button>
               ))}
             </div>
+            {history.hasNextPage && (
+              <button type='button' className='log-investigator-new-button'
+                disabled={history.isFetchingNextPage} onClick={() => void history.fetchNextPage()}>
+                {history.isFetchingNextPage ? 'Loading…' : 'Load more history'}
+              </button>
+            )}
+            {removeHistory.isError && <p role='alert'>Could not delete the investigation. Please retry.</p>}
             <button
               type='button'
               className='log-investigator-delete-button'
-              disabled={!activeInvestigationId || analysis.isPending}
+              disabled={!activeInvestigationId || analysis.isPending || saveHistory.isPending || removeHistory.isPending}
               onClick={deleteInvestigation}
             >
               Delete
@@ -574,6 +613,7 @@ export function LogSummary({ events }: LogSummaryProps) {
               <div className='log-investigator-conversation'>
                 <InvestigationConversation
                   turns={turns}
+                  evidenceAvailable={evidenceAvailable}
                   pendingQuestion={pendingQuestion}
                   error={error}
                   failedQuestion={failedQuestion}
@@ -588,7 +628,7 @@ export function LogSummary({ events }: LogSummaryProps) {
                   maxLength={1000}
                   aria-label='Ask a question in the investigation chat'
                   value={question}
-                  disabled={!hasVisibleLogs || analysis.isPending}
+                  disabled={!hasVisibleLogs || analysis.isPending || saveHistory.isPending || removeHistory.isPending}
                   placeholder='Ask a follow-up question…'
                   onChange={(event) => setQuestion(event.target.value)}
                 />
@@ -598,7 +638,7 @@ export function LogSummary({ events }: LogSummaryProps) {
                   <button
                     type='submit'
                     className='btn-primary'
-                    disabled={!hasVisibleLogs || !question.trim()}
+                    disabled={!hasVisibleLogs || !question.trim() || saveHistory.isPending || removeHistory.isPending}
                   >
                     <GenerateIcon />
                     Generate

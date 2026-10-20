@@ -19,13 +19,14 @@ if [[ "$api_key_line" == \"*\" ]]; then
   api_key_line="${api_key_line:1:${#api_key_line}-2}"
 fi
 [[ ${#api_key_line} -ge 32 ]] || fail 'Set ANOMALOG_API_KEY in backend/.env to a random secret of at least 32 characters.'
+[[ "$api_key_line" =~ ^[A-Za-z0-9_-]+$ ]] || fail 'ANOMALOG_API_KEY must use only letters, digits, underscores, or hyphens for the frontend proxy.'
 
 http_port="${PROD_HTTP_PORT:-8080}"
 [[ "$http_port" =~ ^[1-9][0-9]{0,4}$ ]] || fail 'PROD_HTTP_PORT must be a TCP port from 1 to 65535.'
 (( http_port <= 65535 )) || fail 'PROD_HTTP_PORT must be a TCP port from 1 to 65535.'
 
 export PROD_HTTP_PORT="$http_port"
-compose=(docker compose --project-name anomalog-prod --file docker-compose.prod.yml)
+compose=(docker compose --env-file backend/.env --project-name anomalog-prod --file docker-compose.prod.yml)
 
 "${compose[@]}" config --quiet
 "${compose[@]}" up --detach --build --force-recreate

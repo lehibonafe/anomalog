@@ -57,6 +57,7 @@ async def test_http_api_rejects_missing_and_wrong_keys(monkeypatch, main_module)
     assert (await main_module.enforce_api_key_and_rate_limit(request("/api/health"), next_handler)).status_code == 200
     assert (await main_module.enforce_api_key_and_rate_limit(request("/api/health", method="POST"), next_handler)).status_code == 401
     assert (await main_module.enforce_api_key_and_rate_limit(request("/api/config"), next_handler)).status_code == 401
+    assert (await main_module.enforce_api_key_and_rate_limit(request("/api/investigations"), next_handler)).status_code == 401
     assert (await main_module.enforce_api_key_and_rate_limit(request("/api/config", "wrong"), next_handler)).status_code == 401
     assert (await main_module.enforce_api_key_and_rate_limit(request("/api/config", API_KEY), next_handler)).status_code == 200
     assert (await main_module.enforce_api_key_and_rate_limit(request("/openapi.json"), next_handler)).status_code == 401

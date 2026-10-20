@@ -15,7 +15,7 @@ flowchart LR
   F --> LS[(Browser local storage: investigation history)]
 ```
 
-`frontend/src/main.tsx` mounts `App.tsx`; `backend/app/main.py` constructs the FastAPI app and includes route modules. `docker-compose.yml` starts separate backend and frontend containers on ports 8000 and 5173 with development bind mounts. No application database, queue, cache service, or background worker deployment is present. The only backend worker thread found is created per Live Tail WebSocket to consume boto3's blocking stream.
+`frontend/src/main.tsx` mounts `App.tsx`; `backend/app/main.py` constructs the FastAPI app and includes route modules. `docker-compose.yml` starts separate backend and frontend containers on ports 8000 and 5173 with development bind mounts. SQLite stores shared investigation history; no queue, cache service, or background worker deployment is present. The only backend worker thread found is created per Live Tail WebSocket to consume boto3's blocking stream.
 
 ## Boundaries and protocols
 

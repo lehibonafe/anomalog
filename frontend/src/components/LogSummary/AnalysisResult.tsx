@@ -34,7 +34,9 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
   return nodes;
 }
 
-export function AnalysisResult({ text, className }: { text: string; className?: string }) {
+export function AnalysisResult({ text, className, evidenceAvailable = true }: {
+  text: string; className?: string; evidenceAvailable?: boolean
+}) {
   const setHighlightedRange = useSelectionStore((s) => s.setHighlightedRange);
 
   function showEvidence(ranges: Array<{ start: number; end: number }>) {
@@ -75,16 +77,18 @@ export function AnalysisResult({ text, className }: { text: string; className?: 
         {references.map(({ label, range }, referenceIndex) => (
           <Fragment key={`${label}-${referenceIndex}`}>
             {referenceIndex > 0 && ', '}
-            <button
-              type="button"
-              className="line-ref"
-              aria-label={range.start === range.end
-                ? `Show referenced log ${range.start}`
-                : `Show referenced logs ${range.start} through ${range.end}`}
-              onClick={() => showEvidence([range])}
-            >
-              {label}
-            </button>
+            {evidenceAvailable ? (
+              <button
+                type="button"
+                className="line-ref"
+                aria-label={range.start === range.end
+                  ? `Show referenced log ${range.start}`
+                  : `Show referenced logs ${range.start} through ${range.end}`}
+                onClick={() => showEvidence([range])}
+              >
+                {label}
+              </button>
+            ) : label}
           </Fragment>
         ))}
         ]

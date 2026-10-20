@@ -4,11 +4,11 @@ This file records possible work. **Recommendations and ideas here are not implem
 
 ## Current System
 
-One React/Vite page calls a FastAPI service for CloudWatch and CloudTrail search, CloudWatch Live Tail, masking, and five LLM adapters. The UI supports facets, charts, export, citations, and local completed-chat history. Local development uses `dev.sh` or Docker Compose; `deploy.sh` builds a local-only production stack for same-host or same-network callers. Backend pytest and frontend Vitest/lint/build exist. There is no app database, end-user authentication, checked-in CI/CD, host production ingress, or telemetry pipeline. See [architecture.md](architecture.md) and [testing.md](testing.md).
+One React/Vite page calls a FastAPI service for CloudWatch and CloudTrail search, CloudWatch Live Tail, masking, five LLM adapters, and SQLite shared history. The UI supports facets, charts, export, citations, and cross-device completed-chat history. Local development uses `dev.sh` or Docker Compose; `deploy.sh` builds a local-only production stack for same-host or same-network callers. Backend pytest and frontend Vitest/lint/build exist. There is no end-user authentication, checked-in CI/CD, host production ingress, or telemetry pipeline. See [architecture.md](architecture.md) and [testing.md](testing.md).
 
 ## Recommended Improvements
 
-1. **Secure deployment access:** confirm the production perimeter and key handling; add a browser sign-in flow if the React UI must work with the protected production API. Keep backend port reachability limited and require TLS before remote access. See [security.md](security.md) and ASM-003.
+1. **Secure deployment access:** confirm the production perimeter and key handling; define a trusted access boundary if the React UI must become remotely reachable. Keep backend port reachability limited and require TLS before remote access. See [security.md](security.md) and ASM-003.
 2. **Review outbound trust:** require verified TLS for external masking once certificates permit; use HTTPS or a verified private channel for the default LiteLLM proxy; review approved provider base URLs and audit any exception text returned to clients.
 3. **Harden cursor integrity and input bounds:** authenticate or server-store continuation state, and set explicit size/range limits for request arrays/text. Add negative tests for cursor tampering and oversized bodies.
 4. **Complete release operations:** add CI/CD and a tested rollback procedure; if remote access becomes necessary, define and validate HTTPS ingress and caller authorization. Review stale module names in `CLAUDE.md` and check the DOCX guides against the actual deployment.
@@ -19,7 +19,7 @@ One React/Vite page calls a FastAPI service for CloudWatch and CloudTrail search
 ## Possible Future Features
 
 - End-user authentication and roles, after defining users, resource boundaries, session lifecycle, and audit needs.
-- Server-side shared investigation history, if collaboration or cross-device use is a confirmed product goal; this would introduce a database and retention policy.
+- A shared-history retention and backup policy, if operators need bounded storage or recovery guarantees.
 - Saved searches or incident workspaces, if operators need repeatable investigations.
 - Alerting or scheduled detection, if live monitoring beyond an interactive page is desired.
 

@@ -141,3 +141,23 @@ export interface AnalysisResponse {
   model: string;
   warnings: string[];
 }
+
+export interface InvestigationTurn {
+  id: number;
+  question: string;
+  response: AnalysisResponse;
+}
+
+export interface SavedInvestigation {
+  id: string;
+  source: string;
+  startTime: string;
+  endTime: string;
+  updatedAt: string;
+  turns: InvestigationTurn[];
+}
+
+export interface InvestigationListResponse {
+  items: SavedInvestigation[];
+  next_offset: number | null;
+}

@@ -2,7 +2,7 @@
 
 ## Framework and entry point
 
-`backend/app/main.py` creates FastAPI, installs CORS, shared API-key and inbound per-IP rate-limit middleware, application-error handlers, and four routers. Uvicorn runs the app in local/Compose development. Routes are thin wrappers around services; there is no database repository layer, scheduled job, or separate worker deployment.
+`backend/app/main.py` creates FastAPI, installs CORS, shared API-key and inbound per-IP rate-limit middleware, application-error handlers, and five routers. Uvicorn runs the app in local/Compose development. Routes are thin wrappers around services; `investigation_history.py` owns SQLite reads and writes. There is no scheduled job or separate worker deployment.
 
 ## Scope and ownership
 

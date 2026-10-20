@@ -6,7 +6,7 @@ Expected production workload, user count, throughput, and latency targets are un
 
 `LogViewer.tsx` uses `react-window` virtualization. Keyword-only filtering skips facet parsing; `utils/logFacets.ts` caches extracted facets for unchanged events. The dashboard and chart derive counts from loaded browser events. The backend's `group_pagination.py` may buffer masked events from several groups inside a compressed cursor, with an 8 MB decompressed cursor cap; many groups or large messages can increase cursor size and serialization cost.
 
-There is no database query/index or connection-pool consideration because no app database exists. `get_settings`, AWS sessions, masker client, and anomaly service are cached per process. Per-process HTTP/provider rate limits and Live Tail caps scale independently with worker count; they are not cluster-wide controls.
+Shared history uses a SQLite index on update time and ID, short-lived connections, paginated listing, and a 1 MB serialized-turn limit per record. `get_settings`, AWS sessions, masker client, and anomaly service are cached per process. Per-process HTTP/provider rate limits and Live Tail caps scale independently with worker count; they are not cluster-wide controls.
 
 ## Potential bottlenecks and recommendations
 

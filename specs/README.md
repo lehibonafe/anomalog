@@ -39,8 +39,8 @@ Feature detail: [log-search.md](log-search.md), [live-tail.md](live-tail.md), [l
 | Product | Complete | Medium | User roles and business goals are inferred from UI and README. |
 | Requirements | Complete | High | IDs cover implemented major capabilities; future policy decisions remain open. |
 | Architecture | Complete | High | Runtime source and Compose files are present. |
-| API | Complete | High | All eight HTTP routes and one WebSocket route mapped to source. |
-| Data Model | Complete | High | No application database found; API and browser state are documented. |
+| API | Complete | High | All twelve HTTP routes and one WebSocket route mapped to source. |
+| Data Model | Complete | High | SQLite shared history, API, and browser state are documented. |
 | Security | Complete | Medium | Code shows controls and risks; deployment perimeter is outside repo. |
 | Infrastructure | Complete | Medium | Compose and a local Nginx proxy are present; actual EC2 setup is not checked in. |
 | Testing | Complete | High | Test inventory is visible; no live integration or browser E2E evidence. |

@@ -2,7 +2,7 @@
 
 ## Storage model
 
-**No application database is present.** There are no tables, migrations, primary keys, foreign keys, indexes, or repository classes in this checkout. AWS owns source log retention. The backend processes events in memory; search cursors serialize continuation state to the client. The browser holds current events in Zustand and stores completed investigation turns in `localStorage`. Database schema and backup/migration procedures are **Not currently applicable**.
+The application uses SQLite for shared investigation history. The `investigations` table has a text primary key, source, start and end times, server update time, and JSON turns, with an index on update time and ID for newest-first listing. AWS owns source log retention. The backend processes search events in memory; search cursors serialize continuation state to the client. The browser holds current events in Zustand. Existing `localStorage` history is imported once and removed after a successful import. Production mounts SQLite on a persistent Docker volume; the operator owns backups.
 
 ## Domain and wire entities
 
@@ -14,10 +14,10 @@
 | Search response | `events[]`, `cursor?`, `truncated`, `total_returned` | Per-response; browser appends while cursor exists. | Masked messages and serialized cursor state. |
 | Analysis request | `events[]`, `context.source_description`, provider/key/model/base URL, prompt, history | Counts and token budgets enforced in `AnomalyService`. | Optional provider key, user question/history, event content. |
 | Analysis response | Answer, `references[]`, chunk/line/token counts, model, warnings | Returned per request; `references` is currently default empty, while UI parses line citations from answer text. | Generated answer may repeat sensitive context. |
-| Saved investigation | `id`, `source`, `startTime`, `endTime`, `updatedAt`, `turns[]` of question/response | `LogSummary.tsx` stores at most 20 in `anomalog.investigation-history.v1`; user can delete. No server copy. | Questions and full answers. |
+| Saved investigation | `id`, `source`, `startTime`, `endTime`, `updatedAt`, `turns[]` of question/response | SQLite `investigations` table; all app callers share read/write/delete access. The browser imports up to 20 legacy `anomalog.investigation-history.v1` entries once. | Questions and full answers. |
 | Provider settings | Per-provider `apiKey`, `model`, `baseUrl` | Zustand in-memory state; selected values sent with requests; no local-storage persistence found. | API keys and chosen destination. |
 
-`LogEvent` and request/response shapes are defined in `backend/app/schemas/` and mostly mirrored in `frontend/src/api/types.ts`. The frontend `AnalysisResponse` type currently omits the backend's `references` field; the UI parses citations from answer text instead. Browser selection state is in `frontend/src/state/selectionStore.ts`. The saved-investigation shape is local to `LogSummary.tsx`, not an HTTP entity.
+`LogEvent` and request/response shapes are defined in `backend/app/schemas/` and mostly mirrored in `frontend/src/api/types.ts`. The frontend `AnalysisResponse` type currently omits the backend's `references` field; the UI parses citations from answer text instead. Browser selection state is in `frontend/src/state/selectionStore.ts`. Shared history is described by `schemas/investigations.py` and `api/types.ts`.
 
 ## Relationships and lifetime
 
@@ -29,7 +29,7 @@ flowchart LR
   V --> F[Visible filtered subset]
   F --> A[Analysis request]
   A --> T[Investigation turn]
-  T --> H[(Browser local storage history)]
+  T --> H[(SQLite shared history)]
 ```
 
-The cursor in `group_pagination.py` is compressed JSON carrying group names, AWS tokens, and pending masked events. It is query-bound by a hash but unsigned; do not treat it as a trusted database identifier. Browser history retention is bounded by item count, not by age or storage size. See [security.md](security.md).
+The cursor in `group_pagination.py` is compressed JSON carrying group names, AWS tokens, and pending masked events. It is query-bound by a hash but unsigned; do not treat it as a trusted database identifier. Saved turns are capped at 1 MB per record, but no age-based retention or total record cap is configured. See [security.md](security.md).

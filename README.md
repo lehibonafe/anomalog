@@ -14,6 +14,7 @@ AI-generated findings include citations that link conclusions directly to the su
 - Investigate AWS CloudTrail activity
 - Stream logs in real time using CloudWatch Live Tail
 - AI-assisted log analysis and incident investigation
+- Shared investigation history across browsers, stored in SQLite
 - Evidence-based AI responses with log-line citations
 - Automatic PII, credential, and secret masking
 - HTTP status-code analytics and filtering
@@ -36,6 +37,7 @@ AI-generated findings include citations that link conclusions directly to the su
 | Frontend | React, TypeScript, Vite |
 | State Management | Zustand |
 | Data Fetching | TanStack React Query, Axios |
+| Shared History | SQLite on a persistent Docker volume |
 | Real-Time Streaming | WebSockets, CloudWatch Live Tail |
 | AI / LLM | LiteLLM, OpenAI, Gemini, Anthropic, Ollama |
 | Security | AWS IAM, API Key Authentication, PII & Secret Masking |
@@ -87,6 +89,8 @@ AI-generated findings include citations that link conclusions directly to the su
 The browser does not connect directly to AWS. The FastAPI backend owns AWS communication, retrieves the requested events, masks sensitive information, and returns sanitized data to the frontend.
 
 For CloudWatch Live Tail, the backend maintains the AWS stream and forwards masked events to the browser through WebSockets.
+
+Completed AI conversations are saved in one shared SQLite history. Anyone who can reach the application can view and delete those entries; there are no individual accounts. The saved history contains questions and answers, not copies of source log events. Docker Compose retains the database on a named volume across container recreation. Existing browser history is imported automatically when that browser opens the updated app.
 
 ---
 
