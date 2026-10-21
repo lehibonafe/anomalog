@@ -421,7 +421,7 @@ export function LogSummary({ events }: LogSummaryProps) {
         <div className='log-summary-heading'>
           <span className='log-summary-spark' aria-hidden='true'>✦</span>
           <div>
-            <h2 id='log-investigator-title'>AI Log Investigator</h2>
+            <h2 id='log-investigator-title'>AI Log Assistant</h2>
             <p>{availabilityText}</p>
           </div>
         </div>
