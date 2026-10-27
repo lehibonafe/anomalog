@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     litellm_model: str = "qwen3.8-flash"
     litellm_base_url: str = "http://llm.etapinc.com/v1"
     litellm_ca_bundle: str | None = None
+    litellm_verify_ssl: bool = True
     litellm_enable_thinking: bool = False
     # Additional destinations explicitly trusted for each provider.
     model_base_url_allowlist: dict[

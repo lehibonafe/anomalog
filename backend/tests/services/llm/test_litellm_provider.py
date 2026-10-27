@@ -73,6 +73,34 @@ def test_private_ca_is_added_to_verified_litellm_client(tmp_path):
     assert str(provider.client.base_url).rstrip("/") == "https://team-proxy.example.com/v1"
 
 
+def test_litellm_tls_verification_is_enabled_by_default():
+    settings = make_settings()
+
+    with patch("app.services.llm.litellm_provider.DefaultAsyncHttpxClient") as create_client:
+        make_provider(settings=settings)
+
+    assert settings.litellm_verify_ssl is True
+    create_client.assert_not_called()
+
+
+def test_insecure_litellm_client_skips_ca_loading(tmp_path):
+    ca_file = tmp_path / "invalid-ca.pem"
+    ca_file.write_text("not a PEM certificate")
+    settings = make_settings(
+        litellm_ca_bundle=str(ca_file), litellm_verify_ssl="false"
+    )
+
+    with (
+        patch("app.services.llm.litellm_provider.httpx.create_ssl_context") as create_trust,
+        patch("app.services.llm.litellm_provider.DefaultAsyncHttpxClient", return_value=httpx.AsyncClient()) as create_client,
+    ):
+        make_provider(settings=settings)
+
+    assert settings.litellm_verify_ssl is False
+    create_trust.assert_not_called()
+    create_client.assert_called_once_with(verify=False)
+
+
 def test_private_ca_path_must_exist(tmp_path):
     with pytest.raises(ValidationError, match="LITELLM_CA_BUNDLE"):
         make_settings(litellm_ca_bundle=str(tmp_path / "missing.pem"))

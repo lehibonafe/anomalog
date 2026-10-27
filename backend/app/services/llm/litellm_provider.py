@@ -43,7 +43,9 @@ class LiteLLMProvider(OpenAIProvider):
             "litellm", base_url, settings.litellm_base_url, settings
         )
         http_client = None
-        if settings.litellm_ca_bundle:
+        if not settings.litellm_verify_ssl:
+            http_client = DefaultAsyncHttpxClient(verify=False)
+        elif settings.litellm_ca_bundle:
             try:
                 trust = httpx.create_ssl_context(verify=True)
                 trust.load_verify_locations(cafile=settings.litellm_ca_bundle)
