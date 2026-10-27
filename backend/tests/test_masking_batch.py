@@ -40,6 +40,15 @@ def test_client_getter_returns_none_uses_local_masking_only(mock_get_client):
 
 
 @patch("app.services.masking.get_masking_http_client")
+def test_client_setup_failure_uses_local_masking(mock_get_client):
+    mock_get_client.side_effect = ValueError("invalid masker URL")
+    texts = ["contact jane@example.com", "plain log line"]
+
+    assert mask_messages_batch(texts, make_settings()) == [mask_message(t) for t in texts]
+    mock_get_client.assert_called_once()
+
+
+@patch("app.services.masking.get_masking_http_client")
 def test_success_uses_external_result_not_local(mock_get_client):
     mock_client = MagicMock()
     mock_get_client.return_value = mock_client
@@ -106,6 +115,16 @@ def test_connection_error_falls_back_to_local(mock_get_client):
 
 
 @patch("app.services.masking.get_masking_http_client")
+def test_unexpected_client_error_falls_back_to_local(mock_get_client):
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.post.side_effect = RuntimeError("masker failed")
+    texts = ["contact jane@example.com"]
+
+    assert mask_messages_batch(texts, make_settings()) == [mask_message(t) for t in texts]
+
+
+@patch("app.services.masking.get_masking_http_client")
 def test_timeout_falls_back_to_local(mock_get_client):
     mock_client = MagicMock()
     mock_get_client.return_value = mock_client
@@ -115,6 +134,51 @@ def test_timeout_falls_back_to_local(mock_get_client):
     result = mask_messages_batch(texts, make_settings())
 
     assert result == [mask_message(t) for t in texts]
+
+
+@patch("app.services.masking.get_masking_http_client")
+def test_timeout_pauses_later_calls_then_recovers(mock_get_client):
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.post.side_effect = [
+        httpx.TimeoutException("timed out"),
+        MagicMock(**{"json.return_value": {"masked_data": {"0": "[PERSON_1]"}}}),
+        MagicMock(**{"json.return_value": {"masked_data": {"0": "[PERSON_1]"}}}),
+    ]
+    now = [100.0]
+
+    with patch("app.services.masking.monotonic", side_effect=lambda: now[0]):
+        assert mask_messages_batch(["Jane"], make_settings()) == ["Jane"]
+        now[0] = 129.0
+        assert mask_messages_batch(["Jane"], make_settings()) == ["Jane"]
+        mock_client.post.assert_called_once()
+
+        now[0] = 130.0
+        assert mask_messages_batch(["Jane"], make_settings()) == ["[PERSON_1]"]
+        assert mask_messages_batch(["Jane"], make_settings()) == ["[PERSON_1]"]
+
+    assert mock_client.post.call_count == 3
+
+
+@patch("app.services.masking.get_masking_http_client")
+def test_only_one_recovery_probe_runs_at_a_time(mock_get_client):
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    now = [100.0]
+    mock_client.post.side_effect = httpx.TimeoutException("timed out")
+
+    with patch("app.services.masking.monotonic", side_effect=lambda: now[0]):
+        assert mask_messages_batch(["Jane"], make_settings()) == ["Jane"]
+        now[0] = 130.0
+
+        def probe(*args, **kwargs):
+            assert mask_messages_batch(["Jane"], make_settings()) == ["Jane"]
+            return MagicMock(**{"json.return_value": {"masked_data": {"0": "[PERSON_1]"}}})
+
+        mock_client.post.side_effect = probe
+        assert mask_messages_batch(["Jane"], make_settings()) == ["[PERSON_1]"]
+
+    assert mock_client.post.call_count == 2
 
 
 @patch("app.services.masking.get_masking_http_client")
@@ -129,6 +193,35 @@ def test_malformed_response_falls_back_to_local(mock_get_client):
     result = mask_messages_batch(texts, make_settings())
 
     assert result == [mask_message(t) for t in texts]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [None, [], {"masked_data": None}, {"masked_data": []},
+     {"masked_data": {"0": None}}, {"masked_data": {"0": 42}}],
+)
+@patch("app.services.masking.get_masking_http_client")
+def test_invalid_response_shape_falls_back_to_local(mock_get_client, body):
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.post.return_value.json.return_value = body
+    texts = ["contact jane@example.com"]
+
+    assert mask_messages_batch(texts, make_settings()) == [mask_message(t) for t in texts]
+
+
+@patch("app.services.masking.get_masking_http_client")
+def test_http_status_warning_includes_code_without_error_text(mock_get_client, caplog):
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    response = httpx.Response(503, request=httpx.Request("POST", "https://masker.invalid"))
+    mock_client.post.side_effect = httpx.HTTPStatusError(
+        "private log content", request=response.request, response=response
+    )
+
+    assert mask_messages_batch(["Jane"], make_settings()) == ["Jane"]
+    assert "HTTP 503" in caplog.text
+    assert "private log content" not in caplog.text
 
 
 @patch("app.services.masking.get_masking_http_client")

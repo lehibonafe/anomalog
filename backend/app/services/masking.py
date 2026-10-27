@@ -8,6 +8,10 @@ in CLAUDE.md.
 
 import logging
 import re
+from dataclasses import dataclass
+from threading import Lock
+from time import monotonic
+from weakref import WeakKeyDictionary
 
 import httpx
 
@@ -17,6 +21,50 @@ from app.core.masking_http_client import get_masking_http_client
 logger = logging.getLogger(__name__)
 
 MASK = "***MASKED***"
+MASKING_RETRY_DELAY_SECONDS = 30
+
+
+@dataclass
+class _MaskerRetryState:
+    retry_at: float = 0
+    probe_in_flight: bool = False
+
+
+_retry_states: WeakKeyDictionary[httpx.Client, _MaskerRetryState] = WeakKeyDictionary()
+_retry_lock = Lock()
+
+
+def _external_attempt_allowed(client: httpx.Client) -> tuple[bool, bool]:
+    """Allow normal calls, or one recovery probe when the retry pause ends."""
+    with _retry_lock:
+        state = _retry_states.setdefault(client, _MaskerRetryState())
+        if not state.retry_at:
+            return True, False
+        if monotonic() < state.retry_at or state.probe_in_flight:
+            return False, False
+        state.probe_in_flight = True
+        return True, True
+
+
+def _external_attempt_failed(client: httpx.Client) -> None:
+    with _retry_lock:
+        state = _retry_states.setdefault(client, _MaskerRetryState())
+        state.retry_at = monotonic() + MASKING_RETRY_DELAY_SECONDS
+        state.probe_in_flight = False
+
+
+def _external_probe_succeeded(client: httpx.Client) -> None:
+    with _retry_lock:
+        state = _retry_states[client]
+        state.retry_at = 0
+        state.probe_in_flight = False
+
+
+def _external_failure_reason(exc: Exception) -> str:
+    if isinstance(exc, httpx.HTTPStatusError):
+        return f"HTTP {exc.response.status_code}"
+    return type(exc).__name__
+
 
 _AWS_ACCESS_KEY_RE = re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")
 _JWT_RE = re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b")
@@ -145,10 +193,8 @@ def _mask_chunk_external(
 ) -> list[str] | None:
     """One POST /api/mask/structured/ call for one sub-batch.
 
-    Returns the masked texts in order, or None on any failure (connection
-    error, timeout, 4xx, 5xx, or a malformed response body) — all treated as
-    "not available" and never raised, so the caller can fall back to local
-    masking.
+    Returns the masked texts in order, or None when the external request or
+    response fails, so the caller can fall back to local masking.
     """
     keys = [str(i) for i in range(len(chunk))]
     payload = {
@@ -159,10 +205,21 @@ def _mask_chunk_external(
     try:
         resp = client.post("/api/mask/structured/", json=payload)
         resp.raise_for_status()
-        masked_data = resp.json()["masked_data"]
-        return [masked_data[k] for k in keys]
-    except (httpx.HTTPError, KeyError, ValueError) as e:
-        logger.warning("Masking service unavailable, falling back to local masking: %s", e)
+        body = resp.json()
+        if not isinstance(body, dict) or not isinstance(body.get("masked_data"), dict):
+            raise ValueError("Invalid masking response")
+        masked_data = body["masked_data"]
+        masked = [masked_data[k] for k in keys]
+        if not all(isinstance(value, str) for value in masked):
+            raise ValueError("Invalid masked text")
+        return masked
+    except Exception as exc:
+        # The external boundary can fail in client code or decoding as well as
+        # over HTTP. Do not log exception text: it may include log content.
+        logger.warning(
+            "Masking service unavailable; using local masking (%s)",
+            _external_failure_reason(exc),
+        )
         return None
 
 
@@ -170,10 +227,10 @@ def mask_messages_batch(texts: list[str], settings: Settings) -> list[str]:
     """Mask a page of log lines via the external service, sub-batched, with
     local regex fallback per sub-batch on any failure.
 
-    Once one sub-batch fails, stops attempting the external service for the
-    rest of this call (fail-fast) so a fully-down service costs ~one timeout,
-    not one timeout per sub-batch. Already-succeeded sub-batches keep their
-    externally-masked text.
+    Once one sub-batch fails, use local masking for the rest of this call and
+    pause external attempts by the same client across later calls. After the
+    pause, one call probes for recovery. Already-succeeded sub-batches keep
+    their externally-masked text.
     """
     if not texts:
         return []
@@ -181,7 +238,14 @@ def mask_messages_batch(texts: list[str], settings: Settings) -> list[str]:
     if not settings.masking_service_api_key:
         return [mask_message(t) for t in texts]
 
-    client = get_masking_http_client()
+    try:
+        client = get_masking_http_client()
+    except Exception as exc:
+        logger.warning(
+            "Masking service client unavailable; using local masking (%s)",
+            type(exc).__name__,
+        )
+        return [mask_message(t) for t in texts]
     if client is None:
         return [mask_message(t) for t in texts]
 
@@ -191,10 +255,15 @@ def mask_messages_batch(texts: list[str], settings: Settings) -> list[str]:
     for start in range(0, len(texts), batch_size):
         chunk = texts[start : start + batch_size]
         if external_available:
-            masked_chunk = _mask_chunk_external(client, chunk, settings)
-            if masked_chunk is not None:
-                results.extend(masked_chunk)
-                continue
+            allowed, probe = _external_attempt_allowed(client)
+            if allowed:
+                masked_chunk = _mask_chunk_external(client, chunk, settings)
+                if masked_chunk is not None:
+                    if probe:
+                        _external_probe_succeeded(client)
+                    results.extend(masked_chunk)
+                    continue
+                _external_attempt_failed(client)
             external_available = False
         results.extend(mask_message(t) for t in chunk)
     return results

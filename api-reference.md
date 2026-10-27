@@ -9,7 +9,7 @@ This reference describes **Anomalog's own FastAPI service**. The existing [api-r
 - In production, send `X-API-Key: <ANOMALOG_API_KEY>` on HTTP requests and the Live Tail WebSocket handshake. Missing or wrong keys return HTTP `401` (or reject the WebSocket handshake). `GET /api/health` and HTTP `OPTIONS` do not require a key. Development permits unauthenticated calls when `ANOMALOG_API_KEY` is unset. The HTTP rate limit is per client IP and backend process (default 120 requests/minute). A rate-limited request returns HTTP `429` with `{"detail":"Too many requests. Slow down and try again shortly."}`.
 - Pydantic validation failures use FastAPI's HTTP `422` detail format. Application errors use `{"detail":"message"}` (usually `400`, `404`, `429`, or `502`). AWS and other unhandled failures may return `500`.
 - Search cursors and AWS next tokens are opaque. Send the returned value unchanged with the same search inputs; `null` means there is no next page.
-- Search and Live Tail event messages are masked before delivery. The analysis route re-masks submitted messages before an LLM call. `/api/mask/test` uses only the local regex masker.
+- Search and Live Tail event messages are masked before delivery. If the optional external masker cannot be initialized, fails a request, or returns an invalid response, search and Live Tail deliver locally regex-masked messages. After a failed external request, later calls using that client skip it for 30 seconds, then one call probes it for recovery. The analysis route re-masks submitted messages before an LLM call. `/api/mask/test` uses only the local regex masker.
 
 ## Common event object
 

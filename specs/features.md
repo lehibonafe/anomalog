@@ -216,19 +216,19 @@ Backend receives log lines; optional external masking credentials may be configu
 ### Workflow
 Raw AWS message → external masking batch or local regex fallback → API/browser; analysis endpoint re-masks submitted messages.
 ### Business rules
-External failures fall back locally for failed and remaining sub-batches. `/api/mask/test` exercises only the local masker.
+External client setup and request failures, plus missing, non-string, or malformed response fields, fall back locally for the failed and remaining sub-batches. After an external request fails, that client uses local masking across search pages and Live Tail updates for 30 seconds before allowing one recovery probe. Search and Live Tail still deliver locally masked events. `/api/mask/test` exercises only the local masker.
 ### Inputs
 Raw log text and masking settings.
 ### Outputs
 Masked text in results, streams, cursors, and analysis prompts.
 ### Error cases
-External timeout/4xx/5xx/malformed body falls back; regex coverage is finite.
+External setup error, timeout, 4xx/5xx, or malformed body falls back; regex coverage is finite.
+### Acceptance criteria
+When the external client cannot be created or a masking response is invalid, log retrieval still returns every event in order with locally masked messages. A failed external request is not retried for later sub-batches or calls using the same client during the retry pause. One request probes the service after the pause; success restores external masking. Warnings identify HTTP status codes without logging raw response bodies or messages. No raw AWS message reaches search or stream responses in covered cases.
 ### Edge cases
 Already masked messages are passed through re-masking; private data in non-message metadata or typed prompts needs separate review.
 ### Security considerations
 Masking is best-effort and not a guarantee of de-identification; external TLS verification defaults false.
-### Acceptance criteria
-No raw AWS message reaches search/stream responses in covered cases; failure tests prove fallback.
 ### Related requirements
 REQ-SEC-001, REQ-SEC-002, REQ-REL-002.
 ### Related components

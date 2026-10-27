@@ -28,7 +28,7 @@ IDs are stable. Each row is an intended obligation based on the current feature 
 | REQ-PERF-001 | Performance | Bound search response size, analysis input, Live Tail buffers, and provider input with configured limits. | High | Settings, service caps, bounded WebSocket queue, browser buffers. |
 | REQ-PERF-002 | Performance | Virtualize visible rows and avoid facet parsing for keyword-only filtering. | Medium | `LogViewer.tsx` and facet cache; frontend tests. |
 | REQ-REL-001 | Reliability | Close Live Tail on stop, disconnect, inactivity, AWS end, or slow consumer. | High | WebSocket route and stream tests. |
-| REQ-REL-002 | Reliability | Continue with local masking when the external masker fails. | High | `mask_messages_batch`; batch failure tests. |
+| REQ-REL-002 | Reliability | Continue delivering locally masked logs when external masker setup, requests, or response validation fail; pause external retries across pages and stream updates before a recovery probe. | High | `mask_messages_batch` failure and recovery tests; multi-page search regression. |
 | REQ-REL-003 | Reliability | Return usable partial batch answers when later LLM calls fail, with warnings. | Medium | `AnomalyService`; partial-failure tests. |
 | REQ-REL-004 | Reliability | Persist shared history across backend container recreation and show a retryable error when saving fails. | High | SQLite volume in Compose; storage tests; UI state review. |
 | REQ-OPS-001 | Operational | Expose health and safe capability configuration endpoints. | Medium | `routes_meta.py`; health is a shallow process check. |

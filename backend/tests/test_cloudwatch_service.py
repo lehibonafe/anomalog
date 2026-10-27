@@ -4,6 +4,7 @@ import zlib
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 
 from app.config import Settings
@@ -179,6 +180,49 @@ def test_search_log_events_masks_sensitive_data(mock_get_client):
 
     assert "jane.doe@example.com" not in result.events[0].message
     assert "***MASKED***" in result.events[0].message
+
+
+@patch("app.services.masking.get_masking_http_client")
+@patch("app.services.cloudwatch_service.get_logs_client")
+def test_search_log_events_remains_visible_when_external_masker_fails(
+    mock_get_client, mock_get_masking_client
+):
+    mock_get_client.return_value.filter_log_events.side_effect = [
+        {
+            "events": [
+                {"logStreamName": "s1", "timestamp": 1000, "message": "user jane@example.com failed"},
+            ],
+            "nextToken": "next-page",
+        },
+        {
+            "events": [
+                {"logStreamName": "s2", "timestamp": 2000, "message": "plain event"},
+            ],
+        },
+    ]
+    mock_get_masking_client.return_value.post.side_effect = httpx.TimeoutException("timed out")
+    settings = Settings(
+        gemini_api_key="test-key",
+        litellm_api_key="test-litellm-key",
+        masking_service_api_key="test-masking-key",
+    )
+
+    result = cloudwatch_service.search_log_events(
+        log_group_names=["group-a"],
+        start_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        end_time=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        filter_pattern=None,
+        limit=100,
+        cursor=None,
+        settings=settings,
+    )
+
+    assert [event.message for event in result.events] == [
+        "user ***MASKED*** failed", "plain event"
+    ]
+    assert [event.line_index for event in result.events] == [0, 1]
+    assert mock_get_client.return_value.filter_log_events.call_count == 2
+    mock_get_masking_client.return_value.post.assert_called_once()
 
 
 @patch("app.services.cloudwatch_service.get_logs_client")
