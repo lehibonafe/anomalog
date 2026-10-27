@@ -13,6 +13,7 @@ services:
       - "8000"
     volumes:
       - history_data:/data
+      - ./backend/certs:/app/certs:ro
     restart: unless-stopped
     init: true
     healthcheck:

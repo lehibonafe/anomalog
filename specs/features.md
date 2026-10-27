@@ -187,13 +187,13 @@ Backend reachable; provider key or base URL supplied where required.
 ### Workflow
 Open header settings → select provider → enter optional key/model/base URL → test connection → analyze.
 ### Business rules
-LiteLLM is default; settings remain separate in browser memory by provider; test performs a small provider call and reports success or failure.
+LiteLLM is default; settings remain separate in browser memory by provider; test performs a small provider call and reports success or failure. The backend can add a configured private CA PEM to LiteLLM's trusted roots for HTTPS without disabling certificate verification.
 ### Inputs
 `TestConnectionRequest` or analysis provider overrides.
 ### Outputs
 Effective model and diagnostic result; selected settings for subsequent requests.
 ### Error cases
-Missing key, unreachable endpoint, or quota returns `success:false` in many cases.
+Missing key, unreachable endpoint, untrusted certificate, or quota returns `success:false` in many cases. An invalid configured CA file prevents backend settings from loading.
 ### Edge cases
 Switching providers must not reuse another provider's key/base URL.
 ### Security considerations

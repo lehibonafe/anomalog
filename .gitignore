@@ -4,6 +4,7 @@ backend/__pycache__/
 backend/**/__pycache__/
 backend/.pytest_cache/
 backend/data/
+backend/certs/
 frontend/node_modules/
 frontend/dist/
 *.docx
