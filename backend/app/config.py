@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
@@ -27,6 +28,7 @@ class Settings(BaseSettings):
     litellm_api_key: str
     litellm_model: str = "qwen3.8-flash"
     litellm_base_url: str = "http://llm.etapinc.com/v1"
+    litellm_ca_bundle: str | None = None
     litellm_enable_thinking: bool = False
     # Additional destinations explicitly trusted for each provider.
     model_base_url_allowlist: dict[
@@ -96,6 +98,15 @@ class Settings(BaseSettings):
     @classmethod
     def validate_litellm_base_url(cls, value: str) -> str:
         return cls._validate_model_url(value)
+
+    @field_validator("litellm_ca_bundle", mode="before")
+    @classmethod
+    def validate_litellm_ca_bundle(cls, value: object) -> object:
+        if value in (None, ""):
+            return None
+        if not isinstance(value, str) or not Path(value).is_file():
+            raise ValueError("LITELLM_CA_BUNDLE must point to a CA PEM file")
+        return value
 
     @field_validator("model_base_url_allowlist")
     @classmethod

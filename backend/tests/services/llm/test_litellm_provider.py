@@ -1,8 +1,9 @@
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import openai
 import pytest
+from pydantic import ValidationError
 
 from app.config import Settings
 from app.core.errors import BadRequestError, LLMRequestError
@@ -51,6 +52,32 @@ def test_defaults_base_url_from_settings_when_omitted():
     assert str(provider.client.base_url).rstrip("/") == "https://team-proxy.example.com/v1"
 
 
+def test_private_ca_is_added_to_verified_litellm_client(tmp_path):
+    ca_file = tmp_path / "internal-ca.pem"
+    ca_file.write_text("test CA file")
+    settings = make_settings(
+        litellm_base_url="https://team-proxy.example.com/v1",
+        litellm_ca_bundle=str(ca_file),
+    )
+    trust = MagicMock()
+
+    with (
+        patch("app.services.llm.litellm_provider.httpx.create_ssl_context", return_value=trust) as create_trust,
+        patch("app.services.llm.litellm_provider.DefaultAsyncHttpxClient", return_value=httpx.AsyncClient()) as create_client,
+    ):
+        provider = make_provider(settings=settings)
+
+    create_trust.assert_called_once_with(verify=True)
+    trust.load_verify_locations.assert_called_once_with(cafile=str(ca_file))
+    create_client.assert_called_once_with(verify=trust)
+    assert str(provider.client.base_url).rstrip("/") == "https://team-proxy.example.com/v1"
+
+
+def test_private_ca_path_must_exist(tmp_path):
+    with pytest.raises(ValidationError, match="LITELLM_CA_BUNDLE"):
+        make_settings(litellm_ca_bundle=str(tmp_path / "missing.pem"))
+
+
 def test_uses_approved_overridden_base_url():
     settings = make_settings(
         litellm_base_url="https://team-proxy.example.com/v1",
@@ -66,6 +93,17 @@ def test_rejects_unapproved_base_url_before_client_creation():
 
     with pytest.raises(BadRequestError, match="not approved"):
         make_provider(base_url="http://127.0.0.1:1234/v1", api_key=None, settings=settings)
+
+
+def test_rejects_unapproved_base_url_before_loading_private_ca(tmp_path):
+    ca_file = tmp_path / "internal-ca.pem"
+    ca_file.write_text("test CA file")
+    settings = make_settings(litellm_ca_bundle=str(ca_file))
+
+    with patch("app.services.llm.litellm_provider.httpx.create_ssl_context") as create_trust:
+        with pytest.raises(BadRequestError, match="not approved"):
+            make_provider(base_url="https://unapproved.example/v1", settings=settings)
+    create_trust.assert_not_called()
 
 
 async def test_call_chunk_returns_text_response():

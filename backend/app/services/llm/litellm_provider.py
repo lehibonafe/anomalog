@@ -1,4 +1,5 @@
-from openai import AsyncOpenAI
+import httpx
+from openai import AsyncOpenAI, DefaultAsyncHttpxClient
 
 from app.config import Settings
 from app.core.model_destinations import approved_model_base_url
@@ -37,13 +38,21 @@ class LiteLLMProvider(OpenAIProvider):
         base_url: str | None,
         settings: Settings,
     ) -> None:
+        approved_url = approved_model_base_url(
+            "litellm", base_url, settings.litellm_base_url, settings
+        )
+        http_client = None
+        if settings.litellm_ca_bundle:
+            trust = httpx.create_ssl_context(verify=True)
+            trust.load_verify_locations(cafile=settings.litellm_ca_bundle)
+            http_client = DefaultAsyncHttpxClient(verify=trust)
+
         self.client = AsyncOpenAI(
             api_key=api_key or settings.litellm_api_key,
-            base_url=approved_model_base_url(
-                "litellm", base_url, settings.litellm_base_url, settings
-            ),
+            base_url=approved_url,
             timeout=DEFAULT_LLM_TIMEOUT_S,
             max_retries=0,
+            http_client=http_client,
         )
         self.model = model
         self.max_output_tokens = settings.max_llm_output_tokens
