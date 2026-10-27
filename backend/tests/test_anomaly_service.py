@@ -321,6 +321,17 @@ async def test_connection_reports_failure_when_required_api_key_missing():
     assert "api_key" in result.message
 
 
+async def test_connection_reports_invalid_litellm_ca_pem(tmp_path):
+    ca_file = tmp_path / "internal-ca.pem"
+    ca_file.write_text("not a PEM certificate")
+    service = AnomalyService(make_settings(litellm_ca_bundle=str(ca_file)))
+
+    result = await service.test_connection(provider="litellm")
+
+    assert result.success is False
+    assert "readable PEM CA certificates" in result.message
+
+
 async def test_connection_does_not_raise_for_unreachable_base_url(monkeypatch):
     settings = make_settings(
         model_base_url_allowlist={"openai": ["http://localhost:1/v1"]}

@@ -8,6 +8,7 @@
 | HTTP abuse limit | Per-IP middleware returns 429 `{detail}` | Request throttled before route. `main.py`, `core/rate_limiter.py`. |
 | Model quota | `LLMQuotaExceededError` returns 429 | First-chunk quota failure; later failure may become partial answer. `anomaly_service.py`. |
 | Model request failure | `LLMRequestError` returns 502 | Provider failure; connection test often returns HTTP 200 with `success:false`. |
+| Invalid LiteLLM CA PEM | Provider setup returns 400 with a static detail; connection test returns 200 with `success:false` | Backend remains healthy; the operator must replace the malformed PEM. `litellm_provider.py`. |
 | Not found | `NotFoundError` maps to 404 | Defined in `core/errors.py`; no route-specific use found. |
 | AWS/unhandled failure | May return FastAPI 500 | Discovery/search failure; no uniform AWS error mapping found. |
 | External masker failure | Warning with safe error type or HTTP status, then local regex fallback for setup, request, or invalid response | Search and Live Tail continue with reduced masking coverage; external retries pause for 30 seconds per client before one recovery probe. `masking.py`. |

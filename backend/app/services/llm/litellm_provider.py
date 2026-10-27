@@ -2,6 +2,7 @@ import httpx
 from openai import AsyncOpenAI, DefaultAsyncHttpxClient
 
 from app.config import Settings
+from app.core.errors import BadRequestError
 from app.core.model_destinations import approved_model_base_url
 from app.services.llm.base import DEFAULT_LLM_TIMEOUT_S, ProviderDefaults
 from app.services.llm.openai_provider import OpenAIProvider
@@ -43,8 +44,13 @@ class LiteLLMProvider(OpenAIProvider):
         )
         http_client = None
         if settings.litellm_ca_bundle:
-            trust = httpx.create_ssl_context(verify=True)
-            trust.load_verify_locations(cafile=settings.litellm_ca_bundle)
+            try:
+                trust = httpx.create_ssl_context(verify=True)
+                trust.load_verify_locations(cafile=settings.litellm_ca_bundle)
+            except OSError as exc:
+                raise BadRequestError(
+                    "LITELLM_CA_BUNDLE must contain readable PEM CA certificates."
+                ) from exc
             http_client = DefaultAsyncHttpxClient(verify=trust)
 
         self.client = AsyncOpenAI(

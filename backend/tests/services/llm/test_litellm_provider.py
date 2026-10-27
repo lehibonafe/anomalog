@@ -78,6 +78,15 @@ def test_private_ca_path_must_exist(tmp_path):
         make_settings(litellm_ca_bundle=str(tmp_path / "missing.pem"))
 
 
+def test_invalid_private_ca_pem_is_a_provider_configuration_error(tmp_path):
+    ca_file = tmp_path / "internal-ca.pem"
+    ca_file.write_text("not a PEM certificate")
+    settings = make_settings(litellm_ca_bundle=str(ca_file))
+
+    with pytest.raises(BadRequestError, match="readable PEM CA certificates"):
+        make_provider(settings=settings)
+
+
 def test_uses_approved_overridden_base_url():
     settings = make_settings(
         litellm_base_url="https://team-proxy.example.com/v1",

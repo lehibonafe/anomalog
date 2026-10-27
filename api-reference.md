@@ -132,7 +132,7 @@ Request:
 }
 ```
 
-`events` and `context.source_description` are required. `provider` defaults to `litellm` and also accepts `gemini`, `openai`, `anthropic`, and `ollama`. Optional `api_key`, `model`, `base_url`, and `user_prompt` may be omitted or `null`. A supplied `base_url` must exactly match the provider default or an additional URL approved for that provider in `MODEL_BASE_URL_ALLOWLIST`; Gemini does not accept one. Unapproved URLs return HTTP 400 before any provider call. `history` defaults to `[]` and contains `{ "role": "user" | "assistant", "content": "..." }`. The backend rejects more than `MAX_LOG_SEARCH_LINES` input events or `MAX_CHAT_HISTORY_MESSAGES` history messages. Provider calls are subject to server limits and rate pacing.
+`events` and `context.source_description` are required. `provider` defaults to `litellm` and also accepts `gemini`, `openai`, `anthropic`, and `ollama`. Optional `api_key`, `model`, `base_url`, and `user_prompt` may be omitted or `null`. A supplied `base_url` must exactly match the provider default or an additional URL approved for that provider in `MODEL_BASE_URL_ALLOWLIST`; Gemini does not accept one. Unapproved URLs and an invalid configured LiteLLM CA PEM return HTTP 400 before any provider call. `history` defaults to `[]` and contains `{ "role": "user" | "assistant", "content": "..." }`. The backend rejects more than `MAX_LOG_SEARCH_LINES` input events or `MAX_CHAT_HISTORY_MESSAGES` history messages. Provider calls are subject to server limits and rate pacing.
 
 Response fields:
 
@@ -150,7 +150,7 @@ Response fields:
 
 ### `POST /api/analysis/test-connection`
 
-Request: `{"provider":"litellm","api_key":null,"model":null,"base_url":null}`. The same provider names and optional settings apply as above. Response: `{"success":true,"message":"Connected successfully.","model":"effective-model"}`. A provider connection or configuration failure, including an unapproved base URL, is normally returned as HTTP `200` with `success:false` and a diagnostic `message`.
+Request: `{"provider":"litellm","api_key":null,"model":null,"base_url":null}`. The same provider names and optional settings apply as above. Response: `{"success":true,"message":"Connected successfully.","model":"effective-model"}`. A provider connection or configuration failure, including an unapproved base URL or invalid configured LiteLLM CA PEM, is normally returned as HTTP `200` with `success:false` and a diagnostic `message`.
 
 ## Shared investigation history
 
