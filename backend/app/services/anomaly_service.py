@@ -22,6 +22,7 @@ from app.services.llm.prompt_v6 import (
     build_prompt,
     build_reduction_prompt,
 )
+from app.services.llm.gemini_provider import GeminiProvider
 from app.services.llm.registry import PROVIDERS, get_provider_class
 from app.services.masking import mask_message
 
@@ -132,6 +133,15 @@ class AnomalyService:
             settings=self.settings,
         )
         limiter = self._limiters[provider]
+        fallback_instance = None
+        if provider != "gemini" and self.settings.gemini_api_key:
+            fallback_instance = GeminiProvider(
+                api_key=None,
+                model=self.settings.gemini_model,
+                base_url=None,
+                settings=self.settings,
+            )
+        fallback_used = False
 
         if user_prompt:
             relevant, skipped = log_filter.select_for_question(
@@ -208,6 +218,33 @@ class AnomalyService:
                     for event in chunk_events
                 )
             except LLMQuotaExceededError as e:
+                if fallback_instance is not None:
+                    try:
+                        await self._limiters["gemini"].wait()
+                        result = await self._call_chunk(
+                            chunk_events,
+                            prompt_context,
+                            fallback_instance,
+                            self._defaults["gemini"].max_retries,
+                            user_prompt,
+                            history,
+                        )
+                        fallback_used = True
+                        warnings.append(
+                            f"{provider} failed for chunk {i + 1}; Gemini handled it instead."
+                        )
+                        analyses.append(result.analysis)
+                        analyzed += 1
+                        lines_analyzed += sum(
+                            compression.source_counts.get(event.line_index, 1)
+                            for event in chunk_events
+                        )
+                        continue
+                    except (LLMQuotaExceededError, LLMRequestError) as fallback_error:
+                        warnings.append(
+                            f"{provider} and Gemini both failed for chunk {i + 1}: "
+                            f"{fallback_error.message}"
+                        )
                 if analyzed == 0:
                     raise LLMQuotaExceededError(
                         f"{provider} rate limit exceeded before any log chunks could be "
@@ -218,6 +255,34 @@ class AnomalyService:
                 )
                 break
             except LLMRequestError as e:
+                if fallback_instance is not None:
+                    try:
+                        await self._limiters["gemini"].wait()
+                        result = await self._call_chunk(
+                            chunk_events,
+                            prompt_context,
+                            fallback_instance,
+                            self._defaults["gemini"].max_retries,
+                            user_prompt,
+                            history,
+                        )
+                        fallback_used = True
+                        warnings.append(
+                            f"{provider} failed for chunk {i + 1}; Gemini handled it instead."
+                        )
+                        analyses.append(result.analysis)
+                        analyzed += 1
+                        lines_analyzed += sum(
+                            compression.source_counts.get(event.line_index, 1)
+                            for event in chunk_events
+                        )
+                        continue
+                    except (LLMQuotaExceededError, LLMRequestError) as fallback_error:
+                        warnings.append(
+                            f"{provider} and Gemini both failed for chunk {i + 1}: "
+                            f"{fallback_error.message}"
+                        )
+                        continue
                 warnings.append(f"Chunk {i} failed and was skipped: {e.message}")
                 continue
 
@@ -268,7 +333,7 @@ class AnomalyService:
             lines_skipped_by_prefilter=skipped,
             history_messages_omitted=history_messages_omitted,
             estimated_input_tokens=estimated_input_tokens,
-            model=effective_model,
+            model=self.settings.gemini_model if fallback_used else effective_model,
             warnings=warnings,
         )
 
